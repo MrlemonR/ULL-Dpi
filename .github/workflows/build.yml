@@ -14,10 +14,9 @@ jobs:
   apk:
     runs-on: ubuntu-latest
     env:
+      # Tek sır yeterli: anahtar dosyasının kendisi (base64). Şifresi sabit,
+      # dosya olmadan işe yaramıyor.
       KEYSTORE_B64: ${{ secrets.ULL_KEYSTORE_B64 }}
-      ULL_KEYSTORE_PASSWORD: ${{ secrets.ULL_KEYSTORE_PASSWORD }}
-      ULL_KEY_ALIAS: ${{ secrets.ULL_KEY_ALIAS }}
-      ULL_KEY_PASSWORD: ${{ secrets.ULL_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
 
@@ -51,6 +50,14 @@ jobs:
           name: ULL-DPI-apk
           path: out/*.apk
 
+      - name: Sürüm notu
+        run: |
+          {
+            echo '**İndir:** aşağıdaki `ULL-DPI.apk`'
+            echo
+            git log -1 --format=%B | grep -vE '^(Co-Authored-By|Claude-Session):' | sed 's/</\&lt;/g'
+          } > notes.md
+
       # Ana dala her push yeni bir sürüm: Releases'ta "Latest" hep son APK.
       - name: Sürüm yayınla
         if: github.event_name == 'push' && (github.ref_name == github.event.repository.default_branch || startsWith(github.ref, 'refs/tags/v'))
@@ -60,8 +67,5 @@ jobs:
           name: ULL-DPI ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('v0.1.{0}', github.run_number) }}
           target_commitish: ${{ github.sha }}
           make_latest: true
-          body: |
-            **İndir:** aşağıdaki `ULL-DPI.apk`
-
-            Değişiklik: ${{ github.event.head_commit.message }}
+          body_path: notes.md
           files: out/ULL-DPI.apk

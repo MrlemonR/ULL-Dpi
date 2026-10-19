@@ -24,9 +24,10 @@ android {
             val ks = System.getenv("ULL_KEYSTORE")
             if (ks != null && file(ks).exists()) {
                 storeFile = file(ks)
-                storePassword = System.getenv("ULL_KEYSTORE_PASSWORD")
-                keyAlias = System.getenv("ULL_KEY_ALIAS")
-                keyPassword = System.getenv("ULL_KEY_PASSWORD")
+                storeType = "pkcs12"
+                storePassword = System.getenv("ULL_KEYSTORE_PASSWORD") ?: "ull-dpi"
+                keyAlias = System.getenv("ULL_KEY_ALIAS") ?: "ull-dpi"
+                keyPassword = System.getenv("ULL_KEY_PASSWORD") ?: "ull-dpi"
             }
         }
     }

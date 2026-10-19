@@ -97,8 +97,7 @@ Arayüzü tarayıcıda açarsan (`app/src/main/assets/web/index.html`) sahte bir
 telefona yüklemek gerekmez.
 
 APK GitHub Actions'ta derlenir. Ana dala her push `v0.1.<derleme no>` adıyla yeni bir sürüm yayınlar ve APK'yı
-Releases'a ekler. Sabit imza için depo sırlarına `ULL_KEYSTORE_B64` (base64 `.jks`), `ULL_KEYSTORE_PASSWORD`, `ULL_KEY_ALIAS`,
-`ULL_KEY_PASSWORD` ekleyebilirsin; yoksa debug anahtarıyla imzalanır (o durumda güncellerken eskisini kaldırman
-gerekebilir).
+Releases'a ekler. Sabit imza için depo sırlarına tek bir değer ekle: `ULL_KEYSTORE_B64` (anahtar dosyasının base64 hâli,
+şifresi `ull-dpi`). Yoksa her sürüm farklı anahtarla imzalanır ve güncellerken eskisini kaldırman gerekir.
 
 Yazı tipi: JetBrains Mono (SIL OFL 1.1, `assets/web/fonts/OFL.txt`).
