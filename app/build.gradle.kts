@@ -11,12 +11,15 @@ android {
         applicationId = "com.ull.dpi"
         minSdk = 24
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        // CI her derlemede numarayı artırıyor: yeni APK eskinin üstüne kurulur.
+        val build = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
+        versionCode = build
+        versionName = "0.1.$build"
     }
 
     signingConfigs {
-        // CI'da gizli anahtar varsa onunla imzala; yoksa debug anahtarı.
+        // Depo sırlarında anahtar varsa onunla imzala (her sürüm aynı imza →
+        // güncelleme eskisinin üstüne kurulur); yoksa debug anahtarı.
         create("release") {
             val ks = System.getenv("ULL_KEYSTORE")
             if (ks != null && file(ks).exists()) {

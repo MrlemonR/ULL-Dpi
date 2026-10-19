@@ -1,5 +1,10 @@
 # ULL-DPI
 
+### [⬇ ULL-DPI.apk — son sürümü indir](https://github.com/MrlemonR/ULL-Dpi/releases/latest/download/ULL-DPI.apk)
+
+Tüm sürümler: [Releases](https://github.com/MrlemonR/ULL-Dpi/releases). Her güncellemede yeni APK otomatik olarak
+buraya gelir; yukarıdaki bağlantı hep en yenisini indirir.
+
 Android için root gerektirmeyen DPI atlatıcı. [GoodbyeDPI-Turkey](https://github.com/cagritaskn/GoodbyeDPI-Turkey)'nin
 yaptığını telefonda yapar: Discord gibi erişimi kısıtlanmış sitelere **internet hızını bozmadan** girmeni sağlar.
 Arayüz [ULL-Bot](https://github.com/MrlemonR/ULL-Bot)'la aynı dilde: siyah-beyaz + biraz kırmızı, kare köşeler,
@@ -13,8 +18,7 @@ terminal yazı tipi, arkada matrix yağmuru.
 
 ## Kurulum
 
-1. [Actions](../../actions) sekmesinden son başarılı derlemeyi aç, **ULL-DPI-apk** dosyasını indir
-   (ya da [Releases](../../releases)'tan `ULL-DPI.apk`).
+1. Yukarıdaki **⬇ ULL-DPI.apk** bağlantısından indir.
 2. Telefonda APK'yı aç; "bilinmeyen kaynaklar" izni istenirse ver.
 3. Uygulamayı aç → **[ BAŞLAT ]** → VPN izni penceresinde **Tamam**.
 4. Discord açıksa tamamen kapat (son uygulamalardan kaydır) ve yeniden aç.
@@ -92,8 +96,8 @@ app/src/main/assets/web/   arayüz (ULL-Bot tasarımı): index.html, style.css, 
 Arayüzü tarayıcıda açarsan (`app/src/main/assets/web/index.html`) sahte bir köprüyle çalışır; tasarım denemek için
 telefona yüklemek gerekmez.
 
-APK GitHub Actions'ta derlenir. `v*` etiketi atınca (`git tag v0.1.0 && git push --tags`) APK sürüm olarak
-yayınlanır. Sabit imza için depo sırlarına `ULL_KEYSTORE_B64` (base64 `.jks`), `ULL_KEYSTORE_PASSWORD`, `ULL_KEY_ALIAS`,
+APK GitHub Actions'ta derlenir. Ana dala her push `v0.1.<derleme no>` adıyla yeni bir sürüm yayınlar ve APK'yı
+Releases'a ekler. Sabit imza için depo sırlarına `ULL_KEYSTORE_B64` (base64 `.jks`), `ULL_KEYSTORE_PASSWORD`, `ULL_KEY_ALIAS`,
 `ULL_KEY_PASSWORD` ekleyebilirsin; yoksa debug anahtarıyla imzalanır (o durumda güncellerken eskisini kaldırman
 gerekebilir).
 
