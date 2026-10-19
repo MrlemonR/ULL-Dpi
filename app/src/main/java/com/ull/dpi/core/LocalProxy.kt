@@ -78,7 +78,9 @@ class LocalProxy(
 
     fun stop() {
         runCatching { server?.close() }
-        open.toList().forEach { runCatching { it.close() } }
+        // Eşzamanlı küme üzerinde doğrudan dolaş: toList() boyutu okuyup sonra
+        // first() çağırıyor, arada eleman silinirse NoSuchElementException.
+        for (s in open) runCatching { s.close() }
         open.clear()
         pool?.shutdownNow()
         pool?.awaitTermination(1, TimeUnit.SECONDS)
