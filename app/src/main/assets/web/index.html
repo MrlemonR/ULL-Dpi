@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>ULL-DPI</title>
+  <link rel="stylesheet" href="style.css" />
+  <!-- Görünüm ayarını CSS'ten önce uygula: kapalı yağmur bir an bile görünmesin -->
+  <script>
+    try {
+      const a = JSON.parse(localStorage.getItem("ull.dpi.look") || "null");
+      if (a && a.rain === false) document.documentElement.classList.add("no-rain");
+    } catch (e) { /* yok say */ }
+  </script>
+</head>
+<body>
+  <!-- Matrix yağmuru: arayüzün arkasında, dokunmaları engellemez -->
+  <canvas id="rain" aria-hidden="true"></canvas>
+
+  <div class="app">
+    <header class="topbar">
+      <span class="brand">ULL<b>::</b>DPI</span>
+      <span class="ver" id="ver"></span>
+      <span class="conn" id="conn"><i></i><span>KAPALI</span></span>
+    </header>
+
+    <nav class="tabs" role="tablist">
+      <button type="button" role="tab" data-tab="home" aria-selected="true"><span class="n">01</span>DURUM</button>
+      <button type="button" role="tab" data-tab="settings" aria-selected="false"><span class="n">02</span>AYAR</button>
+      <button type="button" role="tab" data-tab="log" aria-selected="false"><span class="n">03</span>LOG</button>
+    </nav>
+
+    <!-- DURUM -->
+    <section class="view is-active" data-view="home">
+      <div class="page">
+        <div class="panel hero">
+          <div class="banner" id="banner" aria-hidden="true"></div>
+          <button class="power" id="power" type="button">
+            <span class="k" id="power-k">[ BAŞLAT ]</span>
+            <span class="s" id="power-s">dokun ▸ bağlan</span>
+          </button>
+          <div class="status-line" id="status-line">&gt; durum: <b>KAPALI</b></div>
+          <div class="spinner" id="spinner"></div>
+        </div>
+
+        <div class="stats">
+          <div class="tile"><div class="l">BAĞLANTI</div><div class="v" id="st-conn">0<small>/ 0</small></div></div>
+          <div class="tile"><div class="l">PARÇALANAN</div><div class="v" id="st-desync">0</div></div>
+          <div class="tile"><div class="l">DNS</div><div class="v" id="st-dns">0</div></div>
+          <div class="tile"><div class="l">TRAFİK</div><div class="v" id="st-traffic">0 B</div></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <h2>PROFİL</h2>
+            <div class="right"><button class="btn btn-ghost" type="button" data-go="settings">DEĞİŞTİR →</button></div>
+          </div>
+          <div class="prof">
+            <div>
+              <div class="name" id="prof-name">TURKEY</div>
+              <div class="sum" id="prof-sum"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <h2>SON OLAYLAR</h2>
+            <div class="right"><button class="btn btn-ghost" type="button" data-go="log">TÜMÜ →</button></div>
+          </div>
+          <div class="term term-mini" id="term-mini"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- AYARLAR -->
+    <section class="view" data-view="settings">
+      <div class="page">
+        <div class="panel">
+          <div class="panel-head"><h2>PROFİL</h2><div class="right"><span class="badge red" id="custom-badge" hidden>ÖZEL</span></div></div>
+          <p class="panel-desc">GoodbyeDPI-Turkey'deki <code>.cmd</code> dosyalarının karşılıkları. Biri çalışmazsa sıradakini dene.</p>
+          <div class="pick" id="presets" role="radiogroup"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>DNS</h2></div>
+          <p class="panel-desc">Operatör DNS'i engelli sitelere sahte adres veriyor. Sorular buraya gidiyor.</p>
+          <div class="pick" id="dns" role="radiogroup"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>YÖNTEM</h2></div>
+          <div class="opt">
+            <div class="txt"><div class="n">TLS kayıt bölme</div><div class="d">ClientHello'yu SNI'nin ortasından iki TLS kaydına ayırır.</div></div>
+            <button class="switch" type="button" role="switch" data-key="tlsrec" aria-checked="false"></button>
+          </div>
+          <div class="opt">
+            <div class="txt"><div class="n">TCP parçalama</div><div class="d">İlk paketi küçük segmentlere böler (-f / -e).</div></div>
+            <button class="switch" type="button" role="switch" data-key="split" aria-checked="false"></button>
+          </div>
+          <div class="opt" data-needs="split">
+            <div class="txt"><div class="n">SNI'den de böl</div><div class="d">Alan adının ilk harfinden sonra ayrıca kes.</div></div>
+            <button class="switch" type="button" role="switch" data-key="splitAtSni" aria-checked="false"></button>
+          </div>
+          <div class="opt col" data-needs="split">
+            <div class="head"><div class="n">İlk parça</div><span class="muted mono" style="font-size:.8rem">bayt</span><span class="val" id="v-firstCut" style="margin-left:auto"></span></div>
+            <input type="range" min="1" max="8" step="1" data-key="firstCut" />
+          </div>
+          <div class="opt col">
+            <div class="head"><div class="n">Parça arası bekleme</div><span class="muted mono" style="font-size:.8rem">ms</span><span class="val" id="v-delayMs" style="margin-left:auto"></span></div>
+            <div class="d" style="margin-top:-.35rem">Sadece bağlantının ilk paketinde; sonrası beklemesiz akar.</div>
+            <input type="range" min="0" max="40" step="1" data-key="delayMs" />
+          </div>
+          <div class="opt">
+            <div class="txt"><div class="n">HTTP Host hilesi</div><div class="d"><code>Host: x</code> → <code>hoSt:X</code> (-r -s -m). Sadece düz HTTP.</div></div>
+            <button class="switch" type="button" role="switch" data-key="httpTricks" aria-checked="false"></button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>KAPSAM</h2></div>
+          <p class="panel-desc">Parçalama hangi sitelere uygulansın? Hız farkı yok denecek kadar az; sorun çıkaran site olursa listeye geç.</p>
+          <div class="seg" id="scope">
+            <button type="button" data-all="1">TÜM SİTELER</button>
+            <button type="button" data-all="0">SADECE LİSTE</button>
+          </div>
+          <div id="domains-wrap" style="margin-top:.8rem">
+            <textarea class="field" id="domains" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="discord.com"></textarea>
+            <p class="muted" style="font-size:.78rem;margin:.4rem 0 0">Satır başına bir alan adı. Alt alan adları da dahil.</p>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>GÖRÜNÜM</h2></div>
+          <div class="opt">
+            <div class="txt"><div class="n">Matrix yağmuru</div><div class="d">Arkadaki akan karakterler.</div></div>
+            <button class="switch" type="button" role="switch" id="look-rain" aria-checked="true"></button>
+          </div>
+          <div class="opt col">
+            <div class="head"><div class="n">Yağmur hızı</div><span class="val" id="v-rainSpeed" style="margin-left:auto"></span></div>
+            <input type="range" min="0.3" max="2" step="0.1" id="look-speed" />
+          </div>
+          <div class="opt">
+            <div class="txt"><div class="n">DNS sorgularını logla</div><div class="d">Her alan adı LOG'a düşer (gizlilik için kapalı).</div></div>
+            <button class="switch" type="button" role="switch" data-key="logDns" aria-checked="false"></button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>NASIL ÇALIŞIR</h2></div>
+          <ul class="how">
+            <li data-n="01">Telefonda yerel bir VPN açılır ama trafik hiçbir sunucuya gitmez; tünel yalnızca DNS'i alır.</li>
+            <li data-n="02">DNS soruları zehirlenmemiş sunucuya sorulur (varsayılan Yandex <code>77.88.8.8:1253</code>).</li>
+            <li data-n="03">Sistem proxy'si <code>127.0.0.1</code>'e çevrilir; her HTTPS bağlantısının sadece İLK paketi parçalanır, gerisi olduğu gibi akar → hız düşmez.</li>
+            <li data-n="04">Discord, tarayıcılar ve sistem proxy'sine uyan uygulamalar çalışır. Root gerekmez.</li>
+          </ul>
+          <p class="note" style="margin-top:.9rem">Discord açılmıyorsa: Discord'u tamamen kapatıp (son uygulamalardan kaydır) yeniden aç. Ayarlar → Ağ → Özel DNS "Kapalı" ya da "Otomatik" olmalı.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- LOG -->
+    <section class="view log-view" data-view="log">
+      <div class="log-bar">
+        <span class="count" id="log-count">0 satır</span>
+        <button class="btn btn-ghost" type="button" id="log-follow" aria-pressed="true">▼ TAKİP</button>
+        <button class="btn btn-danger" type="button" id="log-clear">TEMİZLE</button>
+      </div>
+      <div class="term" id="term"></div>
+    </section>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="rain.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

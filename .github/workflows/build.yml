@@ -1,0 +1,58 @@
+name: build
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    env:
+      KEYSTORE_B64: ${{ secrets.ULL_KEYSTORE_B64 }}
+      ULL_KEYSTORE_PASSWORD: ${{ secrets.ULL_KEYSTORE_PASSWORD }}
+      ULL_KEY_ALIAS: ${{ secrets.ULL_KEY_ALIAS }}
+      ULL_KEY_PASSWORD: ${{ secrets.ULL_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: İmza anahtarı (varsa)
+        if: env.KEYSTORE_B64 != ''
+        run: |
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/ull.jks"
+          echo "ULL_KEYSTORE=$RUNNER_TEMP/ull.jks" >> "$GITHUB_ENV"
+
+      - name: Testler
+        run: ./gradlew --no-daemon testDebugUnitTest
+
+      - name: APK
+        run: ./gradlew --no-daemon assembleDebug assembleRelease
+
+      - name: Dosya adları
+        run: |
+          mkdir -p out
+          cp app/build/outputs/apk/debug/app-debug.apk out/ULL-DPI-debug.apk
+          cp app/build/outputs/apk/release/app-release.apk out/ULL-DPI.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ULL-DPI-apk
+          path: out/*.apk
+
+      - name: Sürüm (etiket)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: out/ULL-DPI.apk
