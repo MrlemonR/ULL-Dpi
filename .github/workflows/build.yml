@@ -33,6 +33,14 @@ jobs:
           echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/ull.jks"
           echo "ULL_KEYSTORE=$RUNNER_TEMP/ull.jks" >> "$GITHUB_ENV"
 
+      - name: Hangi imza?
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "::notice::İmza: sabit anahtar (ULL_KEYSTORE_B64) — güncellemeler eskinin üstüne kurulur"
+          else
+            echo "::warning::İmza: geçici debug anahtarı — ULL_KEYSTORE_B64 sırrı bulunamadı"
+          fi
+
       - name: Testler
         run: ./gradlew --no-daemon testDebugUnitTest
 
