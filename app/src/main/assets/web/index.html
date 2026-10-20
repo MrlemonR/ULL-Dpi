@@ -164,6 +164,13 @@
             <textarea class="field" id="domains" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="discord.com"></textarea>
             <p class="muted" style="font-size:.78rem;margin:.4rem 0 0">Satır başına bir alan adı. Alt alan adları da dahil.</p>
           </div>
+          <div class="excl">
+            <div class="excl-head"><div class="n">Bu uygulamalarda kullanma</div><span class="val" id="excl-count">0</span></div>
+            <p class="d">Seçilen uygulamalar VPN'in tamamen dışında kalır: ne DNS ne parçalama uygulanır, operatörden
+              doğrudan çıkar. Banka / operatör uygulaması açılmıyorsa buraya ekle.</p>
+            <div class="chips" id="excl-chips"></div>
+            <button class="btn btn-ghost" type="button" id="excl-open">UYGULAMA SEÇ →</button>
+          </div>
         </div>
 
         <div class="panel">
@@ -177,6 +184,10 @@
             <button type="button" data-secs="0">KAPALI</button>
           </div>
           <p class="muted mono" style="font-size:.75rem;margin:.55rem 0 0" id="probe-used">bu oturumda ölçüme giden veri: 0 MB</p>
+          <div class="opt" style="margin-top:.8rem;border-top:1px solid var(--line);padding-top:.8rem">
+            <div class="txt"><div class="n">Mobil veride ölçme</div><div class="d">Wi-Fi yokken widget'lar ve SÜREKLİ ÖLÇ durur, veri harcamaz. HIZ TESTİ yine çalışır.</div></div>
+            <button class="switch" type="button" role="switch" data-key="mobilePause" aria-checked="true"></button>
+          </div>
         </div>
 
         <div class="panel">
@@ -217,6 +228,19 @@
       </div>
       <div class="term" id="term"></div>
     </section>
+  </div>
+
+  <!-- Uygulama seçici (tam ekran) -->
+  <div class="sheet" id="apps-sheet" hidden>
+    <div class="sheet-head">
+      <h3>HARİÇ TUTULANLAR</h3>
+      <button class="btn btn-solid" type="button" id="apps-done">TAMAM</button>
+    </div>
+    <label class="sheet-search">
+      <span class="ic" aria-hidden="true">⌕</span>
+      <input id="apps-q" type="search" placeholder="uygulama ara" spellcheck="false" autocomplete="off" />
+    </label>
+    <div class="sheet-list" id="apps-list"></div>
   </div>
 
   <div class="toast" id="toast"></div>

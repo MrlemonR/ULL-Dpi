@@ -98,6 +98,7 @@
 
   // Android geri tuşu: önce ana sekmeye dön.
   window.onBack = () => {
+    if (!$("#apps-sheet").hidden) { closeApps(); return true; }
     const cur = $(".tabs [aria-selected='true']").dataset.tab;
     if (cur === "home") return false;
     go("home");
@@ -318,7 +319,7 @@
       btn.disabled = false;
       btn.textContent = "HIZ TESTİ ▶";
       badge.className = "badge live";
-      badge.textContent = pr.busy ? "ÖLÇÜLÜYOR…" : pr.next >= 0 ? "SÜREKLİ · " + pr.next + " SN" : "SÜREKLİ";
+      badge.textContent = pr.mobile ? "MOBİL VERİ · DURDU" : pr.busy ? "ÖLÇÜLÜYOR…" : pr.next >= 0 ? "SÜREKLİ · " + pr.next + " SN" : "SÜREKLİ";
       ping = pr.ping; down = pr.down >= 0 ? pr.down : null; up = pr.up >= 0 ? pr.up : null;
     } else {
       setGauge(sp.down, "↓ CANLI", false);
@@ -524,6 +525,109 @@
     touched("domains");
   });
 
+  // --- uygulama hariç tutma ---------------------------------------------------------
+
+  const NAMES_KEY = "ull.dpi.appnames";
+  let appNames = {};
+  try { appNames = JSON.parse(localStorage.getItem(NAMES_KEY) || "{}"); } catch (e) { /* yok */ }
+  let appList = null;      // [{pkg, name, icon}]
+  let picked = null;       // sayfa açıkken seçim (Set)
+
+  function renderExcl() {
+    const list = cfg.excludedApps || [];
+    $("#excl-count").textContent = String(list.length);
+    const box = $("#excl-chips");
+    box.textContent = "";
+    for (const pkg of list) {
+      const c = document.createElement("span");
+      c.className = "chip";
+      const a = appList && appList.find((x) => x.pkg === pkg);
+      if (a && a.icon) { const im = document.createElement("img"); im.src = "data:image/png;base64," + a.icon; c.appendChild(im); }
+      c.appendChild(document.createTextNode(appNames[pkg] || pkg));
+      const x = document.createElement("button");
+      x.type = "button"; x.textContent = "×"; x.title = "kaldır";
+      x.addEventListener("click", () => {
+        cfg.excludedApps = list.filter((p) => p !== pkg);
+        touched("excludedApps");
+        renderExcl();
+      });
+      c.appendChild(x);
+      box.appendChild(c);
+    }
+  }
+
+  function loadApps() {
+    if (appList) return appList;
+    try { appList = JSON.parse(DPI.apps()); } catch (e) { appList = []; }
+    for (const a of appList) appNames[a.pkg] = a.name;
+    try { localStorage.setItem(NAMES_KEY, JSON.stringify(appNames)); } catch (e) { /* yok */ }
+    return appList;
+  }
+
+  function appRow(a) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "app-row";
+    b.setAttribute("role", "switch");
+    b.setAttribute("aria-checked", String(picked.has(a.pkg)));
+    if (a.icon) { const im = document.createElement("img"); im.src = "data:image/png;base64," + a.icon; im.alt = ""; b.appendChild(im); }
+    else { const n = document.createElement("span"); n.className = "noicon"; b.appendChild(n); }
+    const t = document.createElement("span"); t.className = "t";
+    const nm = document.createElement("div"); nm.className = "nm"; nm.textContent = a.name;
+    const pk = document.createElement("div"); pk.className = "pk"; pk.textContent = a.pkg;
+    t.append(nm, pk);
+    const sw = document.createElement("span"); sw.className = "switch"; sw.setAttribute("aria-checked", String(picked.has(a.pkg)));
+    b.append(t, sw);
+    b.addEventListener("click", () => {
+      if (picked.has(a.pkg)) picked.delete(a.pkg); else picked.add(a.pkg);
+      const on = picked.has(a.pkg);
+      b.setAttribute("aria-checked", String(on));
+      sw.setAttribute("aria-checked", String(on));
+    });
+    return b;
+  }
+
+  function renderApps() {
+    const q = $("#apps-q").value.trim().toLocaleLowerCase("tr");
+    const box = $("#apps-list");
+    box.textContent = "";
+    const match = (a) => !q || a.name.toLocaleLowerCase("tr").includes(q) || a.pkg.includes(q);
+    const sel = appList.filter((a) => picked.has(a.pkg) && match(a));
+    const rest = appList.filter((a) => !picked.has(a.pkg) && match(a));
+    const sec = (txt) => { const d = document.createElement("div"); d.className = "sheet-sec"; d.textContent = txt; box.appendChild(d); };
+    if (sel.length) { sec("HARİÇ TUTULAN · " + sel.length); sel.forEach((a) => box.appendChild(appRow(a))); }
+    if (rest.length) { sec("UYGULAMALAR"); rest.forEach((a) => box.appendChild(appRow(a))); }
+    if (!sel.length && !rest.length) box.innerHTML = '<div class="empty">eşleşen uygulama yok</div>';
+  }
+
+  function openApps() {
+    picked = new Set(cfg.excludedApps || []);
+    $("#apps-q").value = "";
+    $("#apps-sheet").hidden = false;
+    $("#apps-list").innerHTML = '<div class="empty">uygulamalar yükleniyor…</div>';
+    // Liste ilk seferde ~1 sn sürebilir: önce "yükleniyor" çizilsin.
+    setTimeout(() => { loadApps(); renderApps(); }, 30);
+  }
+
+  function closeApps(apply) {
+    $("#apps-sheet").hidden = true;
+    if (apply && picked) {
+      const next = Array.from(picked);
+      const prev = cfg.excludedApps || [];
+      if (next.length !== prev.length || next.some((p) => !prev.includes(p))) {
+        cfg.excludedApps = next;
+        touched("excludedApps");
+        if (state.running) toast("VPN yeniden başlatılıyor · " + next.length + " uygulama dışarıda");
+      }
+    }
+    picked = null;
+    renderExcl();
+  }
+
+  $("#excl-open").addEventListener("click", openApps);
+  $("#apps-done").addEventListener("click", () => closeApps(true));
+  $("#apps-q").addEventListener("input", () => appList && renderApps());
+
   // --- görünüm (yalnızca bu cihazda, localStorage) ------------------------------
 
   const LOOK_KEY = "ull.dpi.look";
@@ -557,6 +661,7 @@
     let c = {
       preset: "turkey", dns: "yandex", tlsrec: true, split: true, splitAtSni: true, firstCut: 2, delayMs: 3,
       httpTricks: true, scopeAll: true, logDns: false, port: 18881, probeSecs: 10, continuous: false,
+      mobilePause: true, excludedApps: [],
       domains: ["discord.com", "discord.gg", "discordapp.com", "discordapp.net", "discord.media", "discordcdn.com"],
     };
     const s = { running: false, starting: false, error: null, since: 0, port: -1, active: 0, total: 0, desynced: 0, up: 0, down: 0, dns: 0, dnsCached: 0 };
@@ -616,6 +721,9 @@
       status: () => JSON.stringify(s),
       logs: (since) => JSON.stringify(logs.filter((l) => l.id > since)),
       clearLogs: () => { logs.length = 0; },
+      apps: () => JSON.stringify(["Akbank", "Discord", "Firefox", "GitHub", "Pinterest", "SetCard Mobil", "Spotify",
+        "Telegram", "Turkcell Hesabım", "WhatsApp", "X", "YouTube", "Ziraat Mobil"].map((n) => ({
+        pkg: "com." + n.toLowerCase().replace(/[^a-z]/g, "") + ".app", name: n }))),
       speedTest() {
         Object.assign(test, { phase: "ping", ping: -1, down: 0, up: 0, progress: 0 });
         const t0 = Date.now();
@@ -633,7 +741,10 @@
   // --- başla ----------------------------------------------------------------------
 
   if (!cfg.domains) cfg.domains = [];
+  if (!cfg.excludedApps) cfg.excludedApps = [];
+  if (cfg.mobilePause === undefined) cfg.mobilePause = true;
   renderSettings();
+  renderExcl();
   applyLook();
   poll();
   setInterval(poll, 1000);

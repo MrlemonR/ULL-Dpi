@@ -61,7 +61,7 @@ class DpiVpnService : VpnService() {
                 VpnState.summary = cfg.summary()
                 Logbook.add("SYS", "ayarlar uygulandı ▸ ${VpnState.summary}")
                 // DNS sunucusu ya da port değiştiyse tüneli baştan kur.
-                if (cfg.dns != activeDns || cfg.port != activePort) restart()
+                if (cfg.dns != activeDns || cfg.port != activePort || cfg.excludedApps.toSet() != activeExcluded) restart()
                 return START_STICKY
             }
         }
@@ -71,6 +71,7 @@ class DpiVpnService : VpnService() {
 
     private var activeDns = ""
     private var activePort = -1
+    private var activeExcluded = emptySet<String>()
 
     private fun restart() {
         shutdown("yeniden başlatılıyor")
@@ -102,6 +103,14 @@ class DpiVpnService : VpnService() {
                     .setBlocking(false)
                     .setConfigureIntent(openAppIntent())
                 runCatching { b.addDisallowedApplication(packageName) }
+                // Kullanıcının hariç tuttuğu uygulamalar: VPN'i hiç görmezler
+                // (DNS de proxy de uygulanmaz), operatörden doğrudan çıkarlar.
+                for (pkg in cfg.excludedApps) {
+                    if (pkg == packageName) continue
+                    runCatching { b.addDisallowedApplication(pkg) }
+                        .onFailure { Logbook.add("SYS", "hariç tutulamadı (kurulu değil?): $pkg") }
+                }
+                if (cfg.excludedApps.isNotEmpty()) Logbook.add("SYS", "${cfg.excludedApps.size} uygulama VPN dışında")
                 if (Build.VERSION.SDK_INT >= 29) {
                     b.setHttpProxy(ProxyInfo.buildDirectProxy("127.0.0.1", port))
                     b.setMetered(false)
@@ -126,6 +135,7 @@ class DpiVpnService : VpnService() {
 
                 activeDns = cfg.dns
                 activePort = cfg.port
+                activeExcluded = cfg.excludedApps.toSet()
                 VpnState.port = port
                 VpnState.summary = cfg.summary()
                 VpnState.since = System.currentTimeMillis()

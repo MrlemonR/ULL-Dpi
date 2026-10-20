@@ -39,12 +39,16 @@ object WidgetArt {
         val down: Double, // bit/sn, <0 = yok
         val up: Double,
         val ping: Int,
+        /** Mobil veride ölçüm durduysa ping satırında bunu yaz. */
+        val paused: Boolean = false,
     )
 
+    @Synchronized
     fun draw(ctx: Context, kind: Widgets.Kind, w: Int, h: Int, d: Float, data: Data): Bitmap {
         val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val c = Canvas(bmp)
         val p = Paint(Paint.ANTI_ALIAS_FLAG)
+        pausedNow = data.paused
         val top = header(c, p, w, d, data)
         when (kind) {
             Widgets.Kind.FULL -> rows(ctx, c, p, w, h, d, top, data)
@@ -57,7 +61,9 @@ object WidgetArt {
     }
 
     private fun fmt(bits: Double) = if (bits < 0) "—" else Speed.fmt(bits)
-    private fun pingText(ping: Int) = "PING " + (if (ping >= 0) "$ping" else "—") + " ms"
+    private var pausedNow = false
+    private fun pingText(ping: Int) =
+        if (pausedNow) "MOBİL VERİ · DURDU" else "PING " + (if (ping >= 0) "$ping" else "—") + " ms"
 
     /** "ULL::DPI   ● AKTİF". Döner: başlığın alt kenarı. */
     private fun header(c: Canvas, p: Paint, w: Int, d: Float, data: Data): Float {
@@ -202,6 +208,6 @@ object WidgetArt {
         p.typeface = monoReg; p.textSize = 8 * d; p.color = GREY
         c.drawText("↓ Mbps", cx, cy + r * 0.62f, p)
         p.textAlign = Paint.Align.LEFT
-        small(c, p, "↑ ${fmt(data.up)} Mbps · ${if (data.ping >= 0) data.ping else "—"} ms", 0f, h - 2 * d, d)
+        small(c, p, if (data.paused) "MOBİL VERİ · DURDU" else "↑ ${fmt(data.up)} Mbps · ${if (data.ping >= 0) data.ping else "—"} ms", 0f, h - 2 * d, d)
     }
 }

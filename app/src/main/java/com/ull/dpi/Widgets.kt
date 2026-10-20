@@ -85,7 +85,7 @@ object Widgets {
         val imgHDp = hDp - 2 * PAD_DP - (if (k.button) BTN_DP else 0)
         // Bitmap yoğunluğu: keskin ama widget IPC sınırını aşmayacak kadar.
         val d = minOf(ctx.resources.displayMetrics.density, 2.5f)
-        val data = WidgetArt.Data(on, wait, Probe.down, Probe.up, Probe.ping)
+        val data = WidgetArt.Data(on, wait, Probe.down, Probe.up, Probe.ping, Probe.pausedMobile)
         val bmp = WidgetArt.draw(ctx, k, (imgWDp * d).toInt().coerceAtLeast(80), (imgHDp * d).toInt().coerceAtLeast(60), d, data)
         v.setImageViewBitmap(R.id.w_img, bmp)
 

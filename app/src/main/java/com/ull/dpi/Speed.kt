@@ -135,6 +135,7 @@ object Ticker {
             if (n % 5 == 1) Config.load(ctx).let {
                 Probe.intervalSecs = it.probeSecs
                 Probe.continuous = it.continuous
+                Probe.mobilePause = it.mobilePause
             }
             if (Probe.due(ctx)) Probe.runAsync { Widgets.updateAll(ctx) }
             listeners.forEach { it(n) }
@@ -159,6 +160,9 @@ object Probe {
     @Volatile var intervalSecs = 10
     /** Uygulamadaki "SÜREKLİ ÖLÇ" açık mı? */
     @Volatile var continuous = false
+    /** Mobil veride ölçme (ayar) ve şu an bu yüzden durmuş mu. */
+    @Volatile var mobilePause = true
+    @Volatile var pausedMobile = false
     val bytes = AtomicLong()
     val busyNow: Boolean get() = busy.get()
 
@@ -175,7 +179,22 @@ object Probe {
         if (!pm.isInteractive) return false
         if (SystemClock.elapsedRealtime() - lastStart < intervalSecs * 1000L) return false
         // Kimse göstermiyorsa veri harcama.
-        return continuous || Widgets.any(ctx)
+        if (!continuous && !Widgets.any(ctx)) return false
+        val mobile = mobilePause && onMobile(ctx)
+        if (mobile != pausedMobile) {
+            pausedMobile = mobile
+            Widgets.updateAll(ctx) // widget'ta "mobil veri · durdu" yazsın / kalksın
+        }
+        if (mobile) lastStart = SystemClock.elapsedRealtime() // aralıkla tekrar bak
+        return !mobile
+    }
+
+    /** İnternet şu an mobil veriden mi? (Bu uygulama VPN dışında: gerçek ağı görür.) */
+    fun onMobile(ctx: Context): Boolean {
+        val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+        val caps = cm.getNetworkCapabilities(cm.activeNetwork ?: return false) ?: return false
+        return caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR) &&
+            !caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI)
     }
 
     /** Sonraki ölçüme kalan saniye (arayüzdeki geri sayım için). */

@@ -32,6 +32,10 @@ data class Config(
     val probeSecs: Int = 10,
     /** Hız panelinde sürekli ölçüm (widget'taki gibi). */
     val continuous: Boolean = false,
+    /** Mobil verideyken widget/sürekli ölçüm yapma. */
+    val mobilePause: Boolean = true,
+    /** VPN'in hiç dokunmayacağı uygulamalar (paket adları). */
+    val excludedApps: List<String> = emptyList(),
 ) {
     fun toJson(): JSONObject = JSONObject()
         .put("preset", preset)
@@ -48,6 +52,8 @@ data class Config(
         .put("port", port)
         .put("probeSecs", probeSecs)
         .put("continuous", continuous)
+        .put("mobilePause", mobilePause)
+        .put("excludedApps", JSONArray(excludedApps))
 
     fun proxySettings() = ProxySettings(
         desync = DesyncOptions(
@@ -105,6 +111,10 @@ data class Config(
                 port = o.optInt("port", d.port).coerceIn(1024, 65000),
                 probeSecs = o.optInt("probeSecs", d.probeSecs).coerceIn(0, 600),
                 continuous = o.optBoolean("continuous", d.continuous),
+                mobilePause = o.optBoolean("mobilePause", d.mobilePause),
+                excludedApps = o.optJSONArray("excludedApps")
+                    ?.let { a -> List(a.length()) { a.optString(it) } }
+                    ?.filter { it.isNotBlank() }?.distinct() ?: d.excludedApps,
             )
         }
 

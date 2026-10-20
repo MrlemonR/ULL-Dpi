@@ -366,6 +366,39 @@ textarea.field:focus { border-color: var(--accent); }
 
 .note { font-size: 0.82rem; color: var(--text-3); border-left: 2px solid var(--red); padding: 0.1rem 0 0.1rem 0.7rem; margin: 0; line-height: 1.5; }
 
+/* --- uygulama hariç tutma -------------------------------------------------------- */
+
+.excl { margin-top: 1rem; padding-top: 0.9rem; border-top: 1px solid var(--line); }
+.excl-head { display: flex; align-items: baseline; gap: 0.5rem; }
+.excl-head .n { flex: 1; font: 0.9rem/1.3 var(--mono); color: var(--text); }
+.excl-head .val { font: 0.85rem/1 var(--mono); color: var(--red); }
+.excl .d { margin: 0.25rem 0 0.7rem; font-size: 0.82rem; color: var(--text-3); line-height: 1.45; }
+.chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.7rem; }
+.chips:empty { display: none; }
+.chip { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.3rem 0.45rem; border: 1px solid var(--red-line); background: var(--red-soft); font: 0.75rem/1 var(--mono); color: var(--text); }
+.chip img { width: 1rem; height: 1rem; }
+.chip button { color: var(--red); font: 0.85rem/1 var(--mono); padding: 0 0.1rem; }
+
+.sheet { position: fixed; inset: 0; z-index: 70; display: flex; flex-direction: column; background: var(--bg-0); max-width: 720px; margin: 0 auto; }
+.sheet-head { display: flex; align-items: center; gap: 0.75rem; padding: 0.8rem 1rem; background: var(--panel-solid); border-bottom: 1px solid var(--line-strong); }
+.sheet-head h3 { flex: 1; font: 600 0.85rem/1.2 var(--mono); letter-spacing: 0.1em; }
+.sheet-head h3::before { content: "// "; color: var(--red); }
+.sheet-search { display: flex; align-items: center; gap: 0.5rem; margin: 0.75rem 1rem; padding: 0 0.7rem; border: 1px solid var(--line-strong); background: #000; }
+.sheet-search:focus-within { border-color: var(--accent-line); }
+.sheet-search .ic { color: var(--text-3); }
+.sheet-search input { flex: 1; min-width: 0; border: none; outline: none; background: transparent; padding: 0.6rem 0; font: 0.9rem var(--mono); user-select: text; }
+.sheet-list { flex: 1; min-height: 0; overflow-y: auto; padding: 0 1rem 2rem; }
+.sheet-sec { font: 0.68rem/1 var(--mono); letter-spacing: 0.12em; color: var(--text-3); padding: 0.9rem 0 0.45rem; }
+.app-row { display: flex; align-items: center; gap: 0.75rem; width: 100%; padding: 0.55rem 0.2rem; border-bottom: 1px solid var(--line); text-align: left; }
+.app-row:active { background: var(--hover); }
+.app-row img, .app-row .noicon { width: 2.1rem; height: 2.1rem; flex: none; }
+.app-row .noicon { background: var(--line); }
+.app-row .t { flex: 1; min-width: 0; }
+.app-row .nm { font: 0.9rem/1.25 var(--mono); color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.app-row .pk { font: 0.7rem/1.3 var(--mono); color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.app-row[aria-checked="true"] .nm { color: var(--red); }
+.sheet-list .empty { padding: 2rem 0; text-align: center; font: 0.85rem var(--mono); color: var(--text-3); }
+
 /* --- bildirim --------------------------------------------------------------- */
 
 .toast {

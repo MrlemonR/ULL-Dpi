@@ -45,6 +45,7 @@ açıp kapatabilirsin.
 
   Widget'lar da SÜREKLİ ÖLÇ gibi ölçer (aralık: AYAR → ÖLÇÜM). Ölçüm yalnızca ULL-DPI açıkken ya da uygulama
   ekrandayken, ekran açıkken yapılır.
+- **Mobil veride ölçme** (AYAR → ÖLÇÜM, varsayılan açık): Wi-Fi yokken widget'lar ve SÜREKLİ ÖLÇ durur.
 - **Veri kullanımı:** her ölçüm en fazla ~3.8 MB. 10 saniyede bir, ekran açık geçen her saat için en fazla ~1.3 GB eder;
   mobil veride 30 SN ya da KAPALI seçmek isteyebilirsin. Harcanan miktar AYAR → ÖLÇÜM'de görünür.
 - Bildirimde de canlı hız görünür: `ULL::DPI aktif ↓ 12.4 ↑ 1.2 Mbps`.
@@ -85,6 +86,8 @@ Türkiye'deki engel iki katmanlı:
 
 Biri çalışmazsa sıradakini dene. Ayarlar → Yöntem'den her şeyi tek tek değiştirebilirsin; profil o zaman **ÖZEL** olur.
 **Kapsam**'tan parçalamayı sadece listedeki sitelere (varsayılan: Discord alan adları) uygulatabilirsin.
+Aynı yerdeki **Bu uygulamalarda kullanma** ile seçtiğin uygulamalar VPN'in tamamen dışında kalır (ne DNS ne
+parçalama); banka / operatör uygulaması açılmıyorsa onu buraya ekle.
 
 ## Sorun giderme
 

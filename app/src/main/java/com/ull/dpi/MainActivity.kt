@@ -176,7 +176,8 @@ class MainActivity : Activity() {
                 .put("busy", Probe.busyNow)
                 .put("next", Probe.nextIn())
                 .put("interval", Probe.intervalSecs)
-                .put("bytes", Probe.bytes.get()))
+                .put("bytes", Probe.bytes.get())
+                .put("mobile", Probe.pausedMobile))
             .put("test", JSONObject()
                 .put("phase", SpeedTest.phase)
                 .put("ping", SpeedTest.ping)
@@ -199,6 +200,13 @@ class MainActivity : Activity() {
 
         @JavascriptInterface
         fun speedTest() = SpeedTest.start()
+
+        /**
+         * Başlatıcıda görünen uygulamalar: [{pkg, name, icon(base64 PNG)}],
+         * ada göre sıralı. İlk çağrıda simgeler çizildiği için ~1 sn sürebilir.
+         */
+        @JavascriptInterface
+        fun apps(): String = Apps.list(this@MainActivity)
 
         @JavascriptInterface
         fun logs(since: Double): String {
