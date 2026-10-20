@@ -29,6 +29,13 @@ class ProxySettings(
     val scope: Scope,
     /** Parçalar arası bekleme; DPI'ın parçaları birleştirmeye fırsat bulmaması için. */
     val delayMs: Int = 3,
+    /**
+     * İstisna siteler (bankalar, e-Devlet...): parçalama yok, alan adı sistem
+     * DNS'iyle çözülür, bağlantı olduğu gibi geçer.
+     */
+    val exceptions: Scope = Scope(false, emptyList()),
+    /** Parçalı ClientHello'yu reddedip düz hâlini kabul eden site bulununca. */
+    val onAutoException: (String) -> Unit = {},
 )
 
 /*
@@ -70,7 +77,12 @@ class LocalProxy(
         exec.execute {
             while (!s.isClosed) {
                 val c = try { s.accept() } catch (_: IOException) { break }
-                exec.execute { handle(c) }
+                try {
+                    exec.execute { handle(c) }
+                } catch (_: java.util.concurrent.RejectedExecutionException) {
+                    runCatching { c.close() } // durduruluyor
+                    break
+                }
             }
         }
         return s.localPort
@@ -108,24 +120,46 @@ class LocalProxy(
 
             if (method == "CONNECT") {
                 val (host, port) = splitHostPort(parts[1], 443) ?: return reply(cout, "400 Bad Request")
-                remote = connect(host, port) ?: return reply(cout, "502 Bad Gateway")
+                val s = settings
+                val exempt = s.exceptions.matches(host)
+                remote = connect(host, port, systemDns = exempt) ?: return reply(cout, "502 Bad Gateway")
                 open += remote
                 cout.write("HTTP/1.1 200 Connection established\r\n\r\n".toByteArray(Charsets.US_ASCII))
                 cout.flush()
                 val first = readFirstRecord(client, extra, port)
-                val s = settings
                 val sni = TlsHello.sniHost(first)
                 val target = sni ?: host
-                val chunks = when {
-                    first.isEmpty() -> emptyList()
-                    TlsHello.isHandshake(first) && s.scope.matches(target) -> Desync.tls(first, s.desync)
-                    else -> listOf(first)
+                val desync = first.isNotEmpty() && TlsHello.isHandshake(first) &&
+                    s.scope.matches(target) && !exempt && !s.exceptions.matches(target)
+                if (!desync) {
+                    if (first.isNotEmpty()) send(remote, listOf(first), 0)
+                } else {
+                    val chunks = Desync.tls(first, s.desync)
+                    if (chunks.size > 1) {
+                        Stats.desynced.incrementAndGet()
+                        Logbook.add("TLS", "$target:$port ▸ ${chunks.size} parça")
+                    }
+                    send(remote, chunks, s.delayMs)
+                    // Bazı sunucular (ör. banka yük dengeleyicileri) parçalı
+                    // ClientHello'yu reddediyor. Sunucunun ilk cevabına bak.
+                    val resp = peekResponse(remote)
+                    if (resp != null && !rejected(resp)) {
+                        cout.write(resp); cout.flush()
+                    } else {
+                        // Reddedildi: aynı ClientHello'yu bu kez düz gönder.
+                        close(remote)
+                        remote = connect(host, port, systemDns = true) ?: return
+                        open += remote
+                        send(remote, listOf(first), 0)
+                        val plain = peekResponse(remote)
+                        if (plain != null && plain.isNotEmpty() && !rejected(plain)) {
+                            Logbook.add("SYS", "$target parçalamayı kabul etmiyor ▸ otomatik istisna")
+                            s.onAutoException(target)
+                        }
+                        if (plain != null && plain.isNotEmpty()) { cout.write(plain); cout.flush() }
+                        if (plain == null) return
+                    }
                 }
-                if (chunks.size > 1) {
-                    Stats.desynced.incrementAndGet()
-                    Logbook.add("TLS", "$target:$port ▸ ${chunks.size} parça")
-                }
-                send(remote, chunks, s.delayMs)
             } else {
                 // Düz HTTP: "GET http://site/yol HTTP/1.1"
                 val url = parts[1]
@@ -159,8 +193,32 @@ class LocalProxy(
         }
     }
 
-    private fun connect(host: String, port: Int): Socket? {
-        val addrs = try {
+    /**
+     * Sunucunun ilk cevabını oku. Boş dizi = süre doldu (karar verilemedi,
+     * olduğu gibi devam), null = bağlantı kapandı / sıfırlandı.
+     */
+    private fun peekResponse(remote: Socket): ByteArray? {
+        val buf = ByteArray(16 * 1024)
+        return try {
+            remote.soTimeout = 8_000
+            val n = remote.getInputStream().read(buf)
+            if (n < 0) null else buf.copyOf(n)
+        } catch (_: SocketTimeoutException) {
+            ByteArray(0)
+        } catch (_: IOException) {
+            null
+        } finally {
+            runCatching { remote.soTimeout = 0 }
+        }
+    }
+
+    /** TLS uyarı kaydı (0x15) = sunucu ClientHello'yu reddetti. */
+    private fun rejected(resp: ByteArray) = resp.isNotEmpty() && (resp[0].toInt() and 0xFF) == 0x15
+
+    private fun connect(host: String, port: Int, systemDns: Boolean = false): Socket? {
+        val addrs = if (systemDns) {
+            runCatching { InetAddress.getAllByName(host).toList() }.getOrDefault(emptyList())
+        } else try {
             resolver.lookup(host)
         } catch (e: Exception) {
             Logbook.add("DNS", "$host çözülemedi: ${e.message}")
@@ -196,9 +254,14 @@ class LocalProxy(
 
     /** İki yönü birbirine bağla; biri kapanınca diğerinin yazma yönünü kapat. */
     private fun relay(client: Socket, remote: Socket) {
-        val up = pool?.submit {
-            pump(client.getInputStream(), remote.getOutputStream(), true)
-            runCatching { remote.shutdownOutput() }
+        // Durdurulurken havuz kapanmış olabilir: yakalanmayan hata uygulamayı çökertmesin.
+        val up = try {
+            pool?.submit {
+                pump(client.getInputStream(), remote.getOutputStream(), true)
+                runCatching { remote.shutdownOutput() }
+            }
+        } catch (_: java.util.concurrent.RejectedExecutionException) {
+            null
         } ?: return
         pump(remote.getInputStream(), client.getOutputStream(), false)
         runCatching { client.shutdownOutput() }

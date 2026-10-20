@@ -86,8 +86,16 @@ Türkiye'deki engel iki katmanlı:
 
 Biri çalışmazsa sıradakini dene. Ayarlar → Yöntem'den her şeyi tek tek değiştirebilirsin; profil o zaman **ÖZEL** olur.
 **Kapsam**'tan parçalamayı sadece listedeki sitelere (varsayılan: Discord alan adları) uygulatabilirsin.
+**İstisna siteler** (bankalar, e-Devlet, ödeme siteleri hazır gelir) parçalanmaz, operatör DNS'iyle doğrudan geçer.
+Parçalı bağlantıyı reddeden bir site görülürse kendiliğinden düz bağlanır ve **otomatik eklenenler** listesine girer.
 Aynı yerdeki **Bu uygulamalarda kullanma** ile seçtiğin uygulamalar VPN'in tamamen dışında kalır (ne DNS ne
 parçalama); banka / operatör uygulaması açılmıyorsa onu buraya ekle.
+
+## Güncelleme
+
+AYAR'ın en altındaki **GÜNCELLEME** bölümü GitHub Releases'a bakar; yeni sürüm varsa **İNDİR VE KUR** ile indirip
+Android'in kurulum penceresini açar (ilk seferde "bu kaynaktan yüklemeye izin ver" istenir). Güncelleme aynı imzayla
+mevcut uygulamanın üstüne kurulur: ayarlar, istisnalar ve widget'lar yerinde kalır.
 
 ## Sorun giderme
 

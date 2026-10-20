@@ -165,6 +165,19 @@
             <p class="muted" style="font-size:.78rem;margin:.4rem 0 0">Satır başına bir alan adı. Alt alan adları da dahil.</p>
           </div>
           <div class="excl">
+            <div class="excl-head"><div class="n">İstisna siteler</div><span class="val" id="byp-count">0</span></div>
+            <p class="d">Bu sitelerde parçalama yapılmaz, alan adı operatör DNS'iyle çözülür, bağlantı olduğu gibi geçer.
+              Bankalar, e-Devlet ve ödeme siteleri hazır geliyor. Satır başına bir alan adı, alt alan adları dahil.</p>
+            <textarea class="field" id="bypass" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="yapikredi.com.tr"></textarea>
+            <div class="row-btns">
+              <button class="btn btn-ghost" type="button" id="byp-reset">VARSAYILANA DÖN</button>
+            </div>
+            <div class="auto-byp" id="auto-byp-wrap" hidden>
+              <div class="sheet-sec">OTOMATİK EKLENENLER · parçalamayı kabul etmeyen siteler</div>
+              <div class="chips" id="auto-byp"></div>
+            </div>
+          </div>
+          <div class="excl">
             <div class="excl-head"><div class="n">Bu uygulamalarda kullanma</div><span class="val" id="excl-count">0</span></div>
             <p class="d">Seçilen uygulamalar VPN'in tamamen dışında kalır: ne DNS ne parçalama uygulanır, operatörden
               doğrudan çıkar. Banka / operatör uygulaması açılmıyorsa buraya ekle.</p>
@@ -215,6 +228,17 @@
             <li data-n="04">Discord, tarayıcılar ve sistem proxy'sine uyan uygulamalar çalışır. Root gerekmez.</li>
           </ul>
           <p class="note" style="margin-top:.9rem">Discord açılmıyorsa: Discord'u tamamen kapatıp (son uygulamalardan kaydır) yeniden aç. Ayarlar → Ağ → Özel DNS "Kapalı" ya da "Otomatik" olmalı.</p>
+        </div>
+        <div class="panel" id="upd-panel">
+          <div class="panel-head"><h2>GÜNCELLEME</h2><div class="right"><span class="badge red" id="upd-badge" hidden>YENİ</span></div></div>
+          <p class="panel-desc" id="upd-info">kurulu sürüm: —</p>
+          <div class="upd-bar" id="upd-bar" hidden><i id="upd-fill"></i></div>
+          <pre class="upd-notes" id="upd-notes" hidden></pre>
+          <div class="row-btns">
+            <button class="btn btn-ghost" type="button" id="upd-check">GÜNCELLEMELERİ KONTROL ET</button>
+            <button class="btn btn-solid" type="button" id="upd-install" hidden>İNDİR VE KUR</button>
+          </div>
+          <p class="note" style="margin-top:.8rem">Güncelleme mevcut uygulamanın üstüne kurulur: ayarlar, istisnalar ve ana ekrandaki widget'lar yerinde kalır.</p>
         </div>
       </div>
     </section>

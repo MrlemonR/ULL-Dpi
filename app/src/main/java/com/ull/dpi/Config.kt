@@ -36,6 +36,10 @@ data class Config(
     val mobilePause: Boolean = true,
     /** VPN'in hiç dokunmayacağı uygulamalar (paket adları). */
     val excludedApps: List<String> = emptyList(),
+    /** İstisna siteler: parçalama yok, sistem DNS'i, proxy'siz (bankalar vb.). */
+    val bypassDomains: List<String> = DEFAULT_BYPASS,
+    /** Parçalamayı reddettiği görülüp otomatik eklenen siteler. */
+    val autoBypass: List<String> = emptyList(),
 ) {
     fun toJson(): JSONObject = JSONObject()
         .put("preset", preset)
@@ -54,6 +58,8 @@ data class Config(
         .put("continuous", continuous)
         .put("mobilePause", mobilePause)
         .put("excludedApps", JSONArray(excludedApps))
+        .put("bypassDomains", JSONArray(bypassDomains))
+        .put("autoBypass", JSONArray(autoBypass))
 
     fun proxySettings() = ProxySettings(
         desync = DesyncOptions(
@@ -65,7 +71,10 @@ data class Config(
         ),
         scope = Scope(scopeAll, domains),
         delayMs = delayMs,
+        exceptions = Scope(false, allBypass()),
     )
+
+    fun allBypass(): List<String> = (bypassDomains + autoBypass).distinct()
 
     fun resolver(): CachingResolver = CachingResolver(upstream(dns))
 
@@ -84,6 +93,30 @@ data class Config(
             "discord.media", "discordcdn.com", "discord.dev", "discord.new",
             "discordstatus.com", "dis.gd", "discord.co",
         )
+
+        /** Türkiye'de parçalı ClientHello'yu sevmeyen bankalar, kamu ve ödeme siteleri. */
+        val DEFAULT_BYPASS = listOf(
+            "yapikredi.com.tr", "ykb.com", "garantibbva.com.tr", "garanti.com.tr", "isbank.com.tr", "isbank.com",
+            "akbank.com", "ziraatbank.com.tr", "ziraat.com.tr", "halkbank.com.tr", "vakifbank.com.tr",
+            "qnb.com.tr", "qnbfinansbank.com", "denizbank.com", "teb.com.tr", "ing.com.tr", "ingbank.com.tr",
+            "kuveytturk.com.tr", "albaraka.com.tr", "odeabank.com.tr", "fibabanka.com.tr", "sekerbank.com.tr",
+            "anadolubank.com.tr", "enpara.com", "papara.com", "ininal.com", "tosla.com", "param.com.tr",
+            "paycell.com.tr", "iyzico.com", "turkiye.gov.tr", "gib.gov.tr", "sgk.gov.tr", "setcard.com.tr",
+            "pluxee.com.tr", "multinet.com.tr", "turkcell.com.tr",
+        )
+
+        private fun strings(o: JSONObject, key: String): List<String>? =
+            o.optJSONArray(key)?.let { a -> List(a.length()) { a.optString(it).trim().lowercase() } }
+                ?.filter { it.isNotEmpty() }?.distinct()
+
+        /** Otomatik bulunan istisnayı kalıcı olarak kaydet. */
+        @Synchronized
+        fun addAutoBypass(ctx: Context, host: String) {
+            val c = load(ctx)
+            val h = host.lowercase().trimEnd('.')
+            if (c.allBypass().any { h == it || h.endsWith(".$it") }) return
+            save(ctx, c.copy(autoBypass = c.autoBypass + h))
+        }
 
         fun upstream(id: String): Resolver = when (id) {
             "cloudflare" -> DohResolver("https://1.1.1.1/dns-query")
@@ -115,6 +148,8 @@ data class Config(
                 excludedApps = o.optJSONArray("excludedApps")
                     ?.let { a -> List(a.length()) { a.optString(it) } }
                     ?.filter { it.isNotBlank() }?.distinct() ?: d.excludedApps,
+                bypassDomains = strings(o, "bypassDomains") ?: d.bypassDomains,
+                autoBypass = strings(o, "autoBypass") ?: d.autoBypass,
             )
         }
 

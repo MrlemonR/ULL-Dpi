@@ -59,6 +59,7 @@ class MainActivity : Activity() {
         }
         setContentView(root)
         web.loadUrl("file:///android_asset/web/index.html")
+        if (Updater.phase == "idle") Updater.check(this)
     }
 
     @Deprecated("Activity API")
@@ -138,7 +139,8 @@ class MainActivity : Activity() {
 
         @JavascriptInterface
         fun saveConfig(json: String): String = try {
-            val c = Config.fromJson(JSONObject(json))
+            // Otomatik istisnaları servis ekliyor; arayüzdeki eski kopya onları silmesin.
+            val c = Config.fromJson(JSONObject(json)).copy(autoBypass = Config.load(this@MainActivity).autoBypass)
             Config.save(this@MainActivity, c)
             // Ölçüm ayarları hemen geçerli olsun (Ticker 5 sn'de bir de okuyor).
             Probe.intervalSecs = c.probeSecs
@@ -168,6 +170,13 @@ class MainActivity : Activity() {
             .put("dnsFailed", Stats.dnsFailed.get())
             .put("proxyApi", Build.VERSION.SDK_INT >= 29)
             .put("speed", speedJson())
+            .put("update", JSONObject()
+                .put("phase", Updater.phase)
+                .put("current", Updater.current(this@MainActivity))
+                .put("latest", Updater.latest)
+                .put("notes", Updater.notes)
+                .put("progress", Updater.progress)
+                .put("error", Updater.error ?: JSONObject.NULL))
             .put("probe", JSONObject()
                 .put("down", Probe.down)
                 .put("up", Probe.up)
@@ -200,6 +209,20 @@ class MainActivity : Activity() {
 
         @JavascriptInterface
         fun speedTest() = SpeedTest.start()
+
+        @JavascriptInterface
+        fun checkUpdate() = Updater.check(this@MainActivity)
+
+        @JavascriptInterface
+        fun installUpdate() = runOnUiThread { Updater.install(this@MainActivity) }
+
+        @JavascriptInterface
+        fun removeAutoBypass(host: String) {
+            val ctx = this@MainActivity
+            val c = Config.load(ctx)
+            Config.save(ctx, c.copy(autoBypass = c.autoBypass - host))
+            if (VpnState.running) DpiVpnService.send(ctx, DpiVpnService.ACTION_RELOAD)
+        }
 
         /**
          * Başlatıcıda görünen uygulamalar: [{pkg, name, icon(base64 PNG)}],

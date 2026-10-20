@@ -4,6 +4,8 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Wi-Fi mi mobil veri mi? (Mobil veride ölçme ayarı) -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- AYAR → GÜNCELLEME: yeni sürümü indirip kurabilmek için -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Widget/kutucuktan arka planda başlatılabilmesi için ön plan servisi -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -120,5 +122,9 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_meter" />
         </receiver>
+
+        <receiver
+            android:name=".InstallReceiver"
+            android:exported="false" />
     </application>
 </manifest>

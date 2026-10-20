@@ -92,6 +92,11 @@
     $$(".tabs button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === tab)));
     $$(".view").forEach((v) => v.classList.toggle("is-active", v.dataset.view === tab));
     if (tab === "log") scrollLog(true);
+    if (tab === "settings") {
+      // Servis yeni otomatik istisna eklemiş olabilir.
+      try { cfg.autoBypass = JSON.parse(DPI.getConfig()).autoBypass || []; } catch (e) { /* yok */ }
+      renderBypass();
+    }
   }
   $$(".tabs button").forEach((b) => b.addEventListener("click", () => go(b.dataset.tab)));
   $$("[data-go]").forEach((b) => b.addEventListener("click", () => go(b.dataset.go)));
@@ -160,6 +165,7 @@
     try { state = JSON.parse(DPI.status()); } catch (e) { /* köprü meşgul */ }
     render();
     renderSpeed();
+    renderUpdate();
     pullLogs();
   }
 
@@ -220,7 +226,7 @@
   const svgNS = "http://www.w3.org/2000/svg";
 
   const mbps = (bits) => (bits || 0) / 1e6;
-  const fmtM = (bits) => { const m = mbps(bits); return m < 10 ? m.toFixed(1) : m.toFixed(0); };
+  const fmtM = (bits) => { if (bits == null || bits < 0) return "—"; const m = mbps(bits); return m < 10 ? m.toFixed(1) : m.toFixed(0); };
   const pt = (a, r) => [G.cx + r * Math.cos(a * Math.PI / 180), G.cy + r * Math.sin(a * Math.PI / 180)];
   function arc(a1, a2, r) {
     const [x1, y1] = pt(a1, r), [x2, y2] = pt(a2, r);
@@ -335,8 +341,8 @@
       }
     }
     $("#sp-ping").textContent = ping >= 0 ? String(ping) : "—";
-    $("#sp-down").textContent = down == null ? "—" : fmtM(down);
-    $("#sp-up").textContent = up == null ? "—" : fmtM(up);
+    $("#sp-down").textContent = fmtM(down);
+    $("#sp-up").textContent = fmtM(up);
     spark(sp.histDown, sp.histUp);
 
     const last = $("#sp-last");
@@ -345,11 +351,11 @@
       last.innerHTML = pr.at
         ? "son ölçüm <b>" + new Date(pr.at).toTimeString().slice(0, 8) + "</b> · bu oturumda <b>" + bytes(pr.bytes || 0) + "</b> veri"
         : "ilk ölçüm bekleniyor…" + (cfg.probeSecs ? "" : " (AYAR → ÖLÇÜM kapalı)");
-    } else if (t.phase === "error") last.textContent = "> test başarısız: " + (t.error || "bilinmiyor");
+    } else if (t.phase === "error") last.textContent = "> test başarısız: " + (t.error || "bilinmiyor") + " · ayrıntı LOG'da";
     else if (t.phase === "done") {
       const hm = new Date(t.at).toTimeString().slice(0, 5);
       last.innerHTML = "son test <b>" + hm + "</b> · ↓ <b>" + fmtM(t.down) + "</b> ↑ <b>" + fmtM(t.up) +
-        "</b> Mbps · <b>" + t.ping + "</b> ms";
+        "</b> Mbps · <b>" + t.ping + "</b> ms" + (t.error ? " · " + t.error : "");
     }
   }
 
@@ -628,6 +634,85 @@
   $("#apps-done").addEventListener("click", () => closeApps(true));
   $("#apps-q").addEventListener("input", () => appList && renderApps());
 
+  // --- istisna siteler -------------------------------------------------------------
+
+  const DEFAULT_BYPASS = ["yapikredi.com.tr", "ykb.com", "garantibbva.com.tr", "garanti.com.tr", "isbank.com.tr", "isbank.com",
+    "akbank.com", "ziraatbank.com.tr", "ziraat.com.tr", "halkbank.com.tr", "vakifbank.com.tr", "qnb.com.tr",
+    "qnbfinansbank.com", "denizbank.com", "teb.com.tr", "ing.com.tr", "ingbank.com.tr", "kuveytturk.com.tr",
+    "albaraka.com.tr", "odeabank.com.tr", "fibabanka.com.tr", "sekerbank.com.tr", "anadolubank.com.tr", "enpara.com",
+    "papara.com", "ininal.com", "tosla.com", "param.com.tr", "paycell.com.tr", "iyzico.com", "turkiye.gov.tr",
+    "gib.gov.tr", "sgk.gov.tr", "setcard.com.tr", "pluxee.com.tr", "multinet.com.tr", "turkcell.com.tr"];
+
+  function renderBypass() {
+    const list = cfg.bypassDomains || [];
+    const auto = cfg.autoBypass || [];
+    $("#byp-count").textContent = String(list.length + auto.length);
+    if (document.activeElement !== $("#bypass")) $("#bypass").value = list.join("\n");
+    $("#auto-byp-wrap").hidden = !auto.length;
+    const box = $("#auto-byp");
+    box.textContent = "";
+    for (const h of auto) {
+      const c = document.createElement("span");
+      c.className = "chip";
+      c.appendChild(document.createTextNode(h));
+      const x = document.createElement("button");
+      x.type = "button"; x.textContent = "×"; x.title = "kaldır";
+      x.addEventListener("click", () => {
+        DPI.removeAutoBypass(h);
+        cfg.autoBypass = auto.filter((v) => v !== h);
+        renderBypass();
+        toast(h + " istisnalardan çıkarıldı");
+      });
+      c.appendChild(x);
+      box.appendChild(c);
+    }
+  }
+
+  $("#bypass").addEventListener("change", (e) => {
+    cfg.bypassDomains = e.target.value.split(/[\s,]+/).map((x) => x.trim().toLowerCase()).filter(Boolean);
+    touched("bypassDomains");
+    renderBypass();
+  });
+  $("#byp-reset").addEventListener("click", () => {
+    cfg.bypassDomains = DEFAULT_BYPASS.slice();
+    touched("bypassDomains");
+    renderBypass();
+  });
+
+  // --- güncelleme -------------------------------------------------------------------
+
+  function renderUpdate() {
+    const u = state.update;
+    if (!u) return;
+    const btn = $("#upd-install");
+    const cur = "kurulu: <b>v" + u.current + "</b>";
+    btn.hidden = !(u.phase === "available" || (u.phase === "error" && u.latest));
+    btn.textContent = "İNDİR VE KUR " + (u.latest || "");
+    $("#upd-bar").hidden = !(u.phase === "downloading" || u.phase === "installing");
+    $("#upd-fill").style.width = Math.round((u.progress || 0) * 100) + "%";
+    $("#upd-badge").hidden = u.phase !== "available";
+    $("#upd-check").disabled = u.phase === "checking" || u.phase === "downloading";
+    const notes = $("#upd-notes");
+    notes.hidden = !(u.phase === "available" && u.notes);
+    notes.textContent = u.notes || "";
+    $("#upd-info").innerHTML = {
+      idle: cur,
+      checking: cur + " · kontrol ediliyor…",
+      latest: cur + " · <b>güncel</b>" + (u.latest ? " (son: " + u.latest + ")" : ""),
+      available: cur + " · yeni sürüm <b class=\"red\">" + u.latest + "</b>",
+      downloading: cur + " · indiriliyor %" + Math.round((u.progress || 0) * 100),
+      installing: cur + " · kurulum penceresi açılıyor…",
+      error: cur + " · <span class=\"red\">" + (u.error || "hata") + "</span>",
+    }[u.phase] || cur;
+    // Sekmede küçük kırmızı nokta: yeni sürüm var.
+    const tab = $(".tabs [data-tab=settings]");
+    let dot = tab.querySelector(".upd");
+    if (u.phase === "available" && !dot) { dot = document.createElement("span"); dot.className = "upd"; tab.appendChild(dot); }
+    if (u.phase !== "available" && dot) dot.remove();
+  }
+  $("#upd-check").addEventListener("click", () => { DPI.checkUpdate(); setTimeout(poll, 150); });
+  $("#upd-install").addEventListener("click", () => { DPI.installUpdate(); setTimeout(poll, 150); });
+
   // --- görünüm (yalnızca bu cihazda, localStorage) ------------------------------
 
   const LOOK_KEY = "ull.dpi.look";
@@ -661,13 +746,14 @@
     let c = {
       preset: "turkey", dns: "yandex", tlsrec: true, split: true, splitAtSni: true, firstCut: 2, delayMs: 3,
       httpTricks: true, scopeAll: true, logDns: false, port: 18881, probeSecs: 10, continuous: false,
-      mobilePause: true, excludedApps: [],
+      mobilePause: true, excludedApps: [], autoBypass: ["online.ornekbank.com.tr"],
       domains: ["discord.com", "discord.gg", "discordapp.com", "discordapp.net", "discord.media", "discordcdn.com"],
     };
     const s = { running: false, starting: false, error: null, since: 0, port: -1, active: 0, total: 0, desynced: 0, up: 0, down: 0, dns: 0, dnsCached: 0 };
     const sp = { down: 0, up: 0, ping: 24, histDown: Array(40).fill(0), histUp: Array(40).fill(0) };
     const test = { phase: "idle", ping: -1, down: 0, up: 0, progress: 0, error: null, at: 0 };
     s.speed = sp; s.test = test;
+    s.update = { phase: "idle", current: "0.1.0-dev", latest: "", notes: "", progress: 0, error: null };
     const probe = { down: -1, up: -1, ping: -1, at: 0, busy: false, next: 10, interval: 10, bytes: 0 };
     s.probe = probe;
     setInterval(() => {
@@ -721,6 +807,15 @@
       status: () => JSON.stringify(s),
       logs: (since) => JSON.stringify(logs.filter((l) => l.id > since)),
       clearLogs: () => { logs.length = 0; },
+      checkUpdate() {
+        s.update.phase = "checking";
+        setTimeout(() => Object.assign(s.update, { phase: "available", latest: "v0.1.12", notes: "Hız testi yedek sunucular\n- İstisna siteler" }), 900);
+      },
+      installUpdate() {
+        Object.assign(s.update, { phase: "downloading", progress: 0 });
+        const iv = setInterval(() => { s.update.progress += 0.08; if (s.update.progress >= 1) { s.update.phase = "installing"; clearInterval(iv); } }, 200);
+      },
+      removeAutoBypass(h) { c.autoBypass = (c.autoBypass || []).filter((x) => x !== h); },
       apps: () => JSON.stringify(["Akbank", "Discord", "Firefox", "GitHub", "Pinterest", "SetCard Mobil", "Spotify",
         "Telegram", "Turkcell Hesabım", "WhatsApp", "X", "YouTube", "Ziraat Mobil"].map((n) => ({
         pkg: "com." + n.toLowerCase().replace(/[^a-z]/g, "") + ".app", name: n }))),
@@ -742,9 +837,12 @@
 
   if (!cfg.domains) cfg.domains = [];
   if (!cfg.excludedApps) cfg.excludedApps = [];
+  if (!cfg.bypassDomains) cfg.bypassDomains = DEFAULT_BYPASS.slice();
+  if (!cfg.autoBypass) cfg.autoBypass = [];
   if (cfg.mobilePause === undefined) cfg.mobilePause = true;
   renderSettings();
   renderExcl();
+  renderBypass();
   applyLook();
   poll();
   setInterval(poll, 1000);

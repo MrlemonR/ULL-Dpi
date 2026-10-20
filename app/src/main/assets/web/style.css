@@ -399,6 +399,17 @@ textarea.field:focus { border-color: var(--accent); }
 .app-row[aria-checked="true"] .nm { color: var(--red); }
 .sheet-list .empty { padding: 2rem 0; text-align: center; font: 0.85rem var(--mono); color: var(--text-3); }
 
+.row-btns { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.6rem; }
+.excl + .excl { margin-top: 1rem; }
+.auto-byp { margin-top: 0.4rem; }
+#bypass { min-height: 7rem; }
+
+.upd-bar { height: 6px; background: var(--line-strong); margin: 0.2rem 0 0.6rem; }
+.upd-bar i { display: block; height: 100%; width: 0; background: var(--red); transition: width 0.2s; }
+.upd-notes { margin: 0 0 0.4rem; padding: 0.6rem 0.75rem; max-height: 9rem; overflow: auto; white-space: pre-wrap;
+  font: 0.75rem/1.5 var(--mono); color: var(--text-2); background: rgba(0, 0, 0, 0.6); border: 1px solid var(--line); }
+.tabs button .upd { display: inline-block; width: 6px; height: 6px; margin-left: 0.4rem; background: var(--red); vertical-align: 0.15em; animation: blink 1.2s steps(2) infinite; }
+
 /* --- bildirim --------------------------------------------------------------- */
 
 .toast {

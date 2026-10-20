@@ -56,12 +56,14 @@ class DpiVpnService : VpnService() {
                     return START_NOT_STICKY
                 }
                 val cfg = Config.load(this)
-                proxy?.settings = cfg.proxySettings()
+                proxy?.settings = settingsFor(cfg)
                 logDns = cfg.logDns
                 VpnState.summary = cfg.summary()
                 Logbook.add("SYS", "ayarlar uygulandı ▸ ${VpnState.summary}")
                 // DNS sunucusu ya da port değiştiyse tüneli baştan kur.
-                if (cfg.dns != activeDns || cfg.port != activePort || cfg.excludedApps.toSet() != activeExcluded) restart()
+                if (cfg.dns != activeDns || cfg.port != activePort ||
+                    cfg.excludedApps.toSet() != activeExcluded || cfg.bypassDomains.toSet() != activeBypass
+                ) restart()
                 return START_STICKY
             }
         }
@@ -72,6 +74,7 @@ class DpiVpnService : VpnService() {
     private var activeDns = ""
     private var activePort = -1
     private var activeExcluded = emptySet<String>()
+    private var activeBypass = emptySet<String>()
 
     private fun restart() {
         shutdown("yeniden başlatılıyor")
@@ -87,7 +90,7 @@ class DpiVpnService : VpnService() {
                 val cfg = Config.load(this)
                 Stats.reset()
                 val resolver: CachingResolver = cfg.resolver()
-                val p = LocalProxy(resolver, cfg.proxySettings())
+                val p = LocalProxy(resolver, settingsFor(cfg))
                 val port = p.start(cfg.port)
                 proxy = p
                 Logbook.add("SYS", "proxy ▸ 127.0.0.1:$port")
@@ -112,7 +115,9 @@ class DpiVpnService : VpnService() {
                 }
                 if (cfg.excludedApps.isNotEmpty()) Logbook.add("SYS", "${cfg.excludedApps.size} uygulama VPN dışında")
                 if (Build.VERSION.SDK_INT >= 29) {
-                    b.setHttpProxy(ProxyInfo.buildDirectProxy("127.0.0.1", port))
+                    // İstisna siteler proxy'ye hiç uğramasın (uyan uygulamalar doğrudan bağlanır).
+                    val skip = cfg.bypassDomains.flatMap { listOf(it, "*.$it") }
+                    b.setHttpProxy(ProxyInfo.buildDirectProxy("127.0.0.1", port, skip))
                     b.setMetered(false)
                 } else {
                     Logbook.add("SYS", "Android < 10: Wi-Fi proxy'sini elle 127.0.0.1:$port yap")
@@ -136,6 +141,7 @@ class DpiVpnService : VpnService() {
                 activeDns = cfg.dns
                 activePort = cfg.port
                 activeExcluded = cfg.excludedApps.toSet()
+                activeBypass = cfg.bypassDomains.toSet()
                 VpnState.port = port
                 VpnState.summary = cfg.summary()
                 VpnState.since = System.currentTimeMillis()
@@ -193,6 +199,17 @@ class DpiVpnService : VpnService() {
         this, 0, Intent(this, MainActivity::class.java),
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
+
+    /** Proxy ayarları + otomatik istisnayı kaydedip hemen uygulayan geri çağrı. */
+    private fun settingsFor(cfg: Config): com.ull.dpi.core.ProxySettings = cfg.proxySettings().let { ps ->
+        com.ull.dpi.core.ProxySettings(
+            ps.desync, ps.scope, ps.delayMs, ps.exceptions,
+            onAutoException = { host ->
+                Config.addAutoBypass(this, host)
+                proxy?.settings = settingsFor(Config.load(this))
+            },
+        )
+    }
 
     private fun channel() {
         if (Build.VERSION.SDK_INT >= 26) {

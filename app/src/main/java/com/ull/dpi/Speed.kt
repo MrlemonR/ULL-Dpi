@@ -226,10 +226,11 @@ object Probe {
             try {
                 Speed.measurePing(SpeedTest.HOST, 443).let { if (it >= 0) ping = it }
                 down = transfer(true)
-                up = transfer(false)
                 at = System.currentTimeMillis()
-            } catch (_: Exception) {
-                // Bağlantı yoksa son değerler kalsın.
+                up = try { transfer(false) } catch (_: IOException) { -1.0 }
+            } catch (e: Exception) {
+                // Bağlantı yoksa son değerler kalsın; sebebi LOG'da görünsün.
+                Ticker.report(e)
             } finally {
                 busy.set(false)
                 done()
@@ -247,9 +248,11 @@ object Probe {
         val t0 = SystemClock.elapsedRealtime()
         val workers = (0 until streams).map {
             thread(isDaemon = true) {
-                runCatching {
+                try {
                     if (download) SpeedTest.downloadOnce(cap / streams, counter, stop)
                     else SpeedTest.uploadOnce(cap.toInt(), counter, stop)
+                } catch (_: IOException) {
+                    // sayaç 0 kalırsa aşağıda "veri akmadı"
                 }
             }
         }
@@ -295,7 +298,12 @@ object SpeedTest {
                 phase = "down"; progress = 0.0
                 down = measure(DOWN_SECS) { counter, stop -> downloadLoop(counter, stop) }
                 phase = "up"; progress = 0.0
-                up = measure(UP_SECS) { counter, stop -> uploadLoop(counter, stop) }
+                up = try {
+                    measure(UP_SECS) { counter, stop -> uploadLoop(counter, stop) }
+                } catch (e: IOException) {
+                    error = "yükleme ölçülemedi"
+                    -1.0
+                }
                 phase = "done"
             } catch (e: Exception) {
                 error = e.message ?: e.javaClass.simpleName
@@ -308,6 +316,7 @@ object SpeedTest {
 
     private fun runPing() {
         val samples = (0 until 6).map { Speed.measurePing(HOST, 443) }.filter { it >= 0 }
+            .ifEmpty { (0 until 4).map { Speed.measurePing() }.filter { it >= 0 } }
         if (samples.isEmpty()) throw IOException("sunucuya ulaşılamadı")
         // İlk bağlantı DNS'i de içeriyor; en iyi üçün ortalaması.
         ping = samples.sorted().take(3).average().toInt()
@@ -320,7 +329,11 @@ object SpeedTest {
     private fun measure(secs: Double, worker: (AtomicLong, AtomicBoolean) -> Unit): Double {
         val counter = AtomicLong()
         val stop = AtomicBoolean(false)
-        val threads = (0 until STREAMS).map { thread(isDaemon = true) { runCatching { worker(counter, stop) } } }
+        val threads = (0 until STREAMS).map {
+            thread(isDaemon = true) {
+                try { worker(counter, stop) } catch (e: Exception) { warn(e.message ?: e.javaClass.simpleName) }
+            }
+        }
         val t0 = SystemClock.elapsedRealtime()
         var lastBytes = 0L
         var lastT = t0
@@ -347,39 +360,85 @@ object SpeedTest {
         return (lastBytes - warmBytes) * 8.0 / dt
     }
 
-    private fun open(path: String): HttpURLConnection =
-        (URI("https://$HOST$path").toURL().openConnection(Proxy.NO_PROXY) as HttpURLConnection).apply {
+    // --- sunucular -------------------------------------------------------------
+    //
+    // Önce Cloudflare. Sık ölçüm onu istek sınırına (HTTP 429) sokabiliyor;
+    // o zaman bir süre onu atlayıp büyük test dosyası sunan yedeklere geçiyoruz.
+
+    private val DOWN_ALT = listOf(
+        "https://fsn1-speed.hetzner.com/100MB.bin",
+        "https://proof.ovh.net/files/100Mb.dat",
+        "https://speedtest.frankfurt.linode.com/100MB-frankfurt.bin",
+    )
+    @Volatile private var cfBlockedUntil = 0L
+    @Volatile private var altIdx = 0
+    private val warned = HashMap<String, Long>()
+
+    /** Aynı uyarıyı 5 dakikada bir LOG'a yaz. */
+    private fun warn(msg: String) {
+        val now = SystemClock.elapsedRealtime()
+        val first = synchronized(warned) {
+            val last = warned[msg]
+            if (last != null && now - last < 300_000) false else { warned[msg] = now; true }
+        }
+        if (first) com.ull.dpi.core.Logbook.add("ERR", "hız: $msg")
+    }
+
+    private fun cfBlocked() = SystemClock.elapsedRealtime() < cfBlockedUntil
+
+    private fun cfFailed(code: Int) {
+        warn("cloudflare HTTP $code" + if (code == 429) " (istek sınırı, 10 dk yedek sunucu)" else "")
+        if (code == 429 || code == 403) cfBlockedUntil = SystemClock.elapsedRealtime() + 600_000
+    }
+
+    private fun openUrl(url: String): HttpURLConnection =
+        (URI(url).toURL().openConnection(Proxy.NO_PROXY) as HttpURLConnection).apply {
             connectTimeout = 5000
             readTimeout = 5000
             useCaches = false
+            instanceFollowRedirects = true
+            setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android) ULL-DPI")
         }
 
-    private fun downloadLoop(counter: AtomicLong, stop: AtomicBoolean) {
-        val buf = ByteArray(64 * 1024)
-        while (!stop.get()) {
-            val c = open("/__down?bytes=50000000")
+    private fun open(path: String): HttpURLConnection = openUrl("https://$HOST$path")
+
+    /** 200 dönen ilk indirme kaynağını aç. */
+    private fun openDownload(bytes: Long): HttpURLConnection {
+        if (!cfBlocked()) {
+            val c = open("/__down?bytes=$bytes")
             try {
-                c.inputStream.use { inp ->
-                    while (!stop.get()) {
-                        val n = inp.read(buf)
-                        if (n < 0) break
-                        counter.addAndGet(n.toLong())
-                    }
-                }
-            } finally {
-                c.disconnect()
+                val code = c.responseCode
+                if (code == 200) return c
+                c.disconnect(); cfFailed(code)
+            } catch (e: IOException) {
+                c.disconnect(); warn("cloudflare: ${e.javaClass.simpleName}")
             }
         }
+        for (k in DOWN_ALT.indices) {
+            val i = (altIdx + k) % DOWN_ALT.size
+            val c = openUrl(DOWN_ALT[i])
+            try {
+                if (c.responseCode in 200..299) { altIdx = i; return c }
+                warn("${URI(DOWN_ALT[i]).host} HTTP ${c.responseCode}")
+            } catch (e: IOException) {
+                warn("${URI(DOWN_ALT[i]).host}: ${e.javaClass.simpleName}")
+            }
+            c.disconnect()
+        }
+        throw IOException("indirme sunucusuna ulaşılamadı")
     }
 
+    /** [bytes] kadar (ya da durdurulana kadar) indir. */
     fun downloadOnce(bytes: Long, counter: AtomicLong, stop: AtomicBoolean) {
         val buf = ByteArray(32 * 1024)
-        val c = open("/__down?bytes=$bytes")
+        val c = openDownload(bytes)
         try {
             c.inputStream.use { inp ->
-                while (!stop.get()) {
-                    val n = inp.read(buf)
+                var got = 0L
+                while (!stop.get() && got < bytes) {
+                    val n = inp.read(buf, 0, minOf(buf.size.toLong(), bytes - got).toInt())
                     if (n < 0) break
+                    got += n
                     counter.addAndGet(n.toLong())
                 }
             }
@@ -388,7 +447,13 @@ object SpeedTest {
         }
     }
 
+    private fun downloadLoop(counter: AtomicLong, stop: AtomicBoolean) {
+        while (!stop.get()) downloadOnce(50_000_000, counter, stop)
+    }
+
+    /** Yükleme yalnızca Cloudflare'de; sınırdaysa ölçülemez. */
     fun uploadOnce(size: Int, counter: AtomicLong, stop: AtomicBoolean) {
+        if (cfBlocked()) throw IOException("yükleme sunucusu istek sınırında")
         val chunk = ByteArray(16 * 1024)
         val c = open("/__up")
         try {
@@ -405,38 +470,18 @@ object SpeedTest {
                     counter.addAndGet(n.toLong())
                 }
             }
-            if (!stop.get()) c.responseCode
+            if (!stop.get()) c.responseCode.let { if (it != 200) cfFailed(it) }
         } catch (_: IOException) {
+            // Durdururken bağlantıyı yarıda kesiyoruz; beklenen.
         } finally {
             c.disconnect()
         }
     }
 
     private fun uploadLoop(counter: AtomicLong, stop: AtomicBoolean) {
-        val chunk = ByteArray(64 * 1024)
-        val size = 20_000_000
         while (!stop.get()) {
-            val c = open("/__up")
-            try {
-                c.requestMethod = "POST"
-                c.doOutput = true
-                c.setFixedLengthStreamingMode(size)
-                c.setRequestProperty("Content-Type", "application/octet-stream")
-                c.outputStream.use { out ->
-                    var sent = 0
-                    while (sent < size && !stop.get()) {
-                        val n = minOf(chunk.size, size - sent)
-                        out.write(chunk, 0, n)
-                        sent += n
-                        counter.addAndGet(n.toLong())
-                    }
-                }
-                if (!stop.get()) c.responseCode
-            } catch (_: IOException) {
-                // Durdururken bağlantıyı yarıda kesiyoruz; beklenen.
-            } finally {
-                c.disconnect()
-            }
+            uploadOnce(20_000_000, counter, stop)
+            if (cfBlocked()) break
         }
     }
 }

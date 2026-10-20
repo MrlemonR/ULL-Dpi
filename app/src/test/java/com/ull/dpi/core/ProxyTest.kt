@@ -93,6 +93,78 @@ class ProxyTest {
         assertEquals(req0, got.toString().replace("${srv.localPort}", ""))
     }
 
+    /** Parçalı ClientHello'ya TLS uyarısıyla cevap veren, düzünü kabul eden sunucu. */
+    @Test
+    fun serverRejectingFragmentsBecomesAutoException() {
+        val hello = fakeHello("www.yapikredi.com.tr")
+        val learned = mutableListOf<String>()
+        val p = LocalProxy(
+            CachingResolver(FakeUpstream("127.0.0.1")),
+            ProxySettings(DesyncOptions(), Scope(true, emptyList()), delayMs = 2,
+                onAutoException = { synchronized(learned) { learned += it } }),
+        )
+        val srv = ServerSocket(0)
+        thread {
+            repeat(2) {
+                srv.accept().use { c ->
+                    c.soTimeout = 3000
+                    val buf = ByteArray(65536)
+                    var got = 0
+                    // Düz gelirse hello.size, kayıt bölünmüşse hello.size + 5 bayt.
+                    try {
+                        while (got < hello.size) { val n = c.getInputStream().read(buf, got, buf.size - got); if (n < 0) break; got += n }
+                        Thread.sleep(50)
+                        if (c.getInputStream().available() > 0) got += c.getInputStream().read(buf, got, buf.size - got)
+                    } catch (_: java.io.IOException) {}
+                    val reply = if (got == hello.size) byteArrayOf(0x16, 3, 3, 0, 1, 2) else byteArrayOf(0x15, 3, 3, 0, 2, 2, 40)
+                    c.getOutputStream().write(reply); c.getOutputStream().flush()
+                    Thread.sleep(100)
+                }
+            }
+            srv.close()
+        }
+        val port = p.start(28901)
+        try {
+            Socket("127.0.0.1", port).use { c ->
+                c.getOutputStream().write("CONNECT 127.0.0.1:${srv.localPort} HTTP/1.1\r\n\r\n".toByteArray())
+                assertTrue(readHead(c).startsWith("HTTP/1.1 200"))
+                c.getOutputStream().write(hello); c.getOutputStream().flush()
+                c.soTimeout = 5000
+                // İstemci uyarıyı değil, düz denemenin el sıkışma cevabını görmeli.
+                assertEquals(0x16, c.getInputStream().read())
+            }
+            assertEquals(listOf("www.yapikredi.com.tr"), synchronized(learned) { learned.toList() })
+        } finally {
+            p.stop()
+        }
+    }
+
+    @Test
+    fun exceptionDomainsAreNotFragmented() {
+        val hello = fakeHello("www.isbank.com.tr")
+        val p = LocalProxy(
+            CachingResolver(FakeUpstream("127.0.0.1")),
+            ProxySettings(DesyncOptions(), Scope(true, emptyList()), exceptions = Scope(false, listOf("isbank.com.tr"))),
+        )
+        val reads = mutableListOf<Int>()
+        val got = ByteArrayOutputStream()
+        val srv = server(hello.size, reads, got)
+        val port = p.start(28911)
+        try {
+            Socket("127.0.0.1", port).use { c ->
+                c.getOutputStream().write("CONNECT 127.0.0.1:${srv.localPort} HTTP/1.1\r\n\r\n".toByteArray())
+                assertTrue(readHead(c).startsWith("HTTP/1.1 200"))
+                c.getOutputStream().write(hello); c.getOutputStream().flush()
+                val reply = ByteArray(4)
+                var n = 0
+                while (n < 4) n += c.getInputStream().read(reply, n, 4 - n)
+            }
+            assertArrayEquals(hello, got.toByteArray())
+        } finally {
+            p.stop()
+        }
+    }
+
     companion object {
         /** En küçük geçerli ClientHello: SNI uzantısıyla. */
         fun fakeHello(host: String): ByteArray {
