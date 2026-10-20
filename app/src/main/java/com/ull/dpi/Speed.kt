@@ -132,11 +132,101 @@ object Ticker {
                     try { Speed.ping = Speed.measurePing() } finally { pinging.set(false) }
                 }
             }
-            Widgets.updateAll(ctx)
+            if (n % 5 == 1) Config.load(ctx).let {
+                Probe.intervalSecs = it.probeSecs
+                Probe.continuous = it.continuous
+            }
+            if (Probe.due(ctx)) Probe.runAsync { Widgets.updateAll(ctx) }
             listeners.forEach { it(n) }
         } catch (_: Exception) {
             // Zamanlayıcı bir hatada sessizce ölmesin.
         }
+    }
+}
+
+/**
+ * Widget'lar için kısa ölçüm: birkaç saniyede bir küçük bir indirme + yükleme
+ * + ping. Telefon o an internet kullanmasa bile hattın hızını gösteriyor.
+ *
+ * Veri harcadığı için sınırlı: indirme en fazla [DOWN_CAP], yükleme en fazla
+ * [UP_CAP] bayt, ekran kapalıyken hiç ölçülmüyor. Harcanan toplam [bytes].
+ */
+object Probe {
+    @Volatile var down = -1.0 // bit/sn, -1 = henüz yok
+    @Volatile var up = -1.0
+    @Volatile var ping = -1
+    @Volatile var at = 0L
+    @Volatile var intervalSecs = 10
+    /** Uygulamadaki "SÜREKLİ ÖLÇ" açık mı? */
+    @Volatile var continuous = false
+    val bytes = AtomicLong()
+    val busyNow: Boolean get() = busy.get()
+
+    private const val DOWN_CAP = 3_000_000L
+    private const val UP_CAP = 768_000L
+    private const val DOWN_MS = 1500L
+    private const val UP_MS = 1000L
+    private val busy = AtomicBoolean(false)
+    private var lastStart = 0L
+
+    fun due(ctx: Context): Boolean {
+        if (intervalSecs <= 0 || busy.get() || SpeedTest.running) return false
+        val pm = ctx.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+        if (!pm.isInteractive) return false
+        if (SystemClock.elapsedRealtime() - lastStart < intervalSecs * 1000L) return false
+        // Kimse göstermiyorsa veri harcama.
+        return continuous || Widgets.any(ctx)
+    }
+
+    /** Sonraki ölçüme kalan saniye (arayüzdeki geri sayım için). */
+    fun nextIn(): Int {
+        if (intervalSecs <= 0) return -1
+        val left = intervalSecs * 1000L - (SystemClock.elapsedRealtime() - lastStart)
+        return (left / 1000).toInt().coerceAtLeast(0)
+    }
+
+    fun runAsync(done: () -> Unit) {
+        if (!busy.compareAndSet(false, true)) return
+        lastStart = SystemClock.elapsedRealtime()
+        thread(isDaemon = true, name = "probe") {
+            try {
+                Speed.measurePing(SpeedTest.HOST, 443).let { if (it >= 0) ping = it }
+                down = transfer(true)
+                up = transfer(false)
+                at = System.currentTimeMillis()
+            } catch (_: Exception) {
+                // Bağlantı yoksa son değerler kalsın.
+            } finally {
+                busy.set(false)
+                done()
+            }
+        }
+    }
+
+    /** İki paralel akış, süre ya da bayt sınırına kadar; hız = bayt / süre. */
+    private fun transfer(download: Boolean): Double {
+        val cap = if (download) DOWN_CAP else UP_CAP
+        val limitMs = if (download) DOWN_MS else UP_MS
+        val streams = if (download) 2 else 1
+        val counter = AtomicLong()
+        val stop = AtomicBoolean(false)
+        val t0 = SystemClock.elapsedRealtime()
+        val workers = (0 until streams).map {
+            thread(isDaemon = true) {
+                runCatching {
+                    if (download) SpeedTest.downloadOnce(cap / streams, counter, stop)
+                    else SpeedTest.uploadOnce(cap.toInt(), counter, stop)
+                }
+            }
+        }
+        while (workers.any { it.isAlive } && SystemClock.elapsedRealtime() - t0 < limitMs) Thread.sleep(25)
+        stop.set(true)
+        val dt = (SystemClock.elapsedRealtime() - t0) / 1000.0
+        workers.forEach { it.join(800) }
+        val b = counter.get()
+        bytes.addAndGet(b)
+        if (b <= 0 || dt <= 0) throw IOException("veri akmadı")
+        return b * 8 / dt
     }
 }
 
@@ -153,7 +243,7 @@ object SpeedTest {
     @Volatile var error: String? = null
     @Volatile var finishedAt = 0L
 
-    private const val HOST = "speed.cloudflare.com"
+    const val HOST = "speed.cloudflare.com"
     private const val DOWN_SECS = 8.0
     private const val UP_SECS = 7.0
     private const val STREAMS = 4
@@ -245,6 +335,46 @@ object SpeedTest {
             } finally {
                 c.disconnect()
             }
+        }
+    }
+
+    fun downloadOnce(bytes: Long, counter: AtomicLong, stop: AtomicBoolean) {
+        val buf = ByteArray(32 * 1024)
+        val c = open("/__down?bytes=$bytes")
+        try {
+            c.inputStream.use { inp ->
+                while (!stop.get()) {
+                    val n = inp.read(buf)
+                    if (n < 0) break
+                    counter.addAndGet(n.toLong())
+                }
+            }
+        } finally {
+            c.disconnect()
+        }
+    }
+
+    fun uploadOnce(size: Int, counter: AtomicLong, stop: AtomicBoolean) {
+        val chunk = ByteArray(16 * 1024)
+        val c = open("/__up")
+        try {
+            c.requestMethod = "POST"
+            c.doOutput = true
+            c.setFixedLengthStreamingMode(size)
+            c.setRequestProperty("Content-Type", "application/octet-stream")
+            c.outputStream.use { out ->
+                var sent = 0
+                while (sent < size && !stop.get()) {
+                    val n = minOf(chunk.size, size - sent)
+                    out.write(chunk, 0, n)
+                    sent += n
+                    counter.addAndGet(n.toLong())
+                }
+            }
+            if (!stop.get()) c.responseCode
+        } catch (_: IOException) {
+        } finally {
+            c.disconnect()
         }
     }
 

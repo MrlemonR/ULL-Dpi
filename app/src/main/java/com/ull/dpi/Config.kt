@@ -28,6 +28,10 @@ data class Config(
     val domains: List<String> = DEFAULT_DOMAINS,
     val logDns: Boolean = false,
     val port: Int = 18881,
+    /** Widget ölçüm aralığı (sn), 0 = kapalı. */
+    val probeSecs: Int = 10,
+    /** Hız panelinde sürekli ölçüm (widget'taki gibi). */
+    val continuous: Boolean = false,
 ) {
     fun toJson(): JSONObject = JSONObject()
         .put("preset", preset)
@@ -42,6 +46,8 @@ data class Config(
         .put("domains", JSONArray(domains))
         .put("logDns", logDns)
         .put("port", port)
+        .put("probeSecs", probeSecs)
+        .put("continuous", continuous)
 
     fun proxySettings() = ProxySettings(
         desync = DesyncOptions(
@@ -97,6 +103,8 @@ data class Config(
                 domains = list.map { it.trim() }.filter { it.isNotEmpty() },
                 logDns = o.optBoolean("logDns", d.logDns),
                 port = o.optInt("port", d.port).coerceIn(1024, 65000),
+                probeSecs = o.optInt("probeSecs", d.probeSecs).coerceIn(0, 600),
+                continuous = o.optBoolean("continuous", d.continuous),
             )
         }
 

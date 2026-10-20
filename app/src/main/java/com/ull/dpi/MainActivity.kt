@@ -140,6 +140,9 @@ class MainActivity : Activity() {
         fun saveConfig(json: String): String = try {
             val c = Config.fromJson(JSONObject(json))
             Config.save(this@MainActivity, c)
+            // Ölçüm ayarları hemen geçerli olsun (Ticker 5 sn'de bir de okuyor).
+            Probe.intervalSecs = c.probeSecs
+            Probe.continuous = c.continuous
             if (VpnState.running) DpiVpnService.send(this@MainActivity, DpiVpnService.ACTION_RELOAD)
             "ok"
         } catch (e: Exception) {
@@ -165,6 +168,15 @@ class MainActivity : Activity() {
             .put("dnsFailed", Stats.dnsFailed.get())
             .put("proxyApi", Build.VERSION.SDK_INT >= 29)
             .put("speed", speedJson())
+            .put("probe", JSONObject()
+                .put("down", Probe.down)
+                .put("up", Probe.up)
+                .put("ping", Probe.ping)
+                .put("at", Probe.at)
+                .put("busy", Probe.busyNow)
+                .put("next", Probe.nextIn())
+                .put("interval", Probe.intervalSecs)
+                .put("bytes", Probe.bytes.get()))
             .put("test", JSONObject()
                 .put("phase", SpeedTest.phase)
                 .put("ping", SpeedTest.ping)

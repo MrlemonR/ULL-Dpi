@@ -299,18 +299,29 @@
     const badge = $("#sp-mode");
     const btn = $("#sp-test");
     let ping = sp.ping, down = sp.down, up = sp.up;
+    const pr = state.probe || {};
+    const cont = !!cfg.continuous;
+    $$("#sp-modes button").forEach((b) => b.setAttribute("aria-pressed", String((b.dataset.cont === "1") === cont)));
 
     if (testing) {
-      if (t.phase === "ping") setGauge(0, "PING ÖLÇÜLÜYOR…", false);
-      else if (t.phase === "down") setGauge(t.down, "↓ İNDİRME · TEST", false);
-      else setGauge(t.up, "↑ YÜKLEME · TEST", true);
+      if (t.phase === "ping") setGauge(0, "PING…", false);
+      else if (t.phase === "down") setGauge(t.down, "↓ İNDİRME TESTİ", false);
+      else setGauge(t.up, "↑ YÜKLEME TESTİ", true);
       badge.className = "badge red";
       badge.textContent = "TEST · " + PHASE[t.phase] + " %" + Math.round((t.progress || 0) * 100);
       ping = t.ping; down = t.phase === "ping" ? null : t.down; up = t.phase === "up" ? t.up : null;
       btn.disabled = true;
       btn.textContent = "TEST…";
+    } else if (cont) {
+      // Sürekli ölçüm: widget'taki gibi birkaç saniyede bir gerçek ölçüm.
+      setGauge(Math.max(0, pr.down), "↓ HER " + (pr.interval || cfg.probeSecs) + " SN", false);
+      btn.disabled = false;
+      btn.textContent = "HIZ TESTİ ▶";
+      badge.className = "badge live";
+      badge.textContent = pr.busy ? "ÖLÇÜLÜYOR…" : pr.next >= 0 ? "SÜREKLİ · " + pr.next + " SN" : "SÜREKLİ";
+      ping = pr.ping; down = pr.down >= 0 ? pr.down : null; up = pr.up >= 0 ? pr.up : null;
     } else {
-      setGauge(sp.down, "↓ İNDİRME · CANLI", false);
+      setGauge(sp.down, "↓ CANLI", false);
       btn.disabled = false;
       btn.textContent = t.phase === "done" || t.phase === "error" ? "TEKRAR ▶" : "HIZ TESTİ ▶";
       if (recent) {
@@ -328,13 +339,31 @@
     spark(sp.histDown, sp.histUp);
 
     const last = $("#sp-last");
-    if (t.phase === "error") last.textContent = "> test başarısız: " + (t.error || "bilinmiyor");
+    $("#probe-used").textContent = "bu oturumda ölçüme giden veri: " + bytes(pr.bytes || 0);
+    if (cont && !testing && !recent) {
+      last.innerHTML = pr.at
+        ? "son ölçüm <b>" + new Date(pr.at).toTimeString().slice(0, 8) + "</b> · bu oturumda <b>" + bytes(pr.bytes || 0) + "</b> veri"
+        : "ilk ölçüm bekleniyor…" + (cfg.probeSecs ? "" : " (AYAR → ÖLÇÜM kapalı)");
+    } else if (t.phase === "error") last.textContent = "> test başarısız: " + (t.error || "bilinmiyor");
     else if (t.phase === "done") {
       const hm = new Date(t.at).toTimeString().slice(0, 5);
       last.innerHTML = "son test <b>" + hm + "</b> · ↓ <b>" + fmtM(t.down) + "</b> ↑ <b>" + fmtM(t.up) +
         "</b> Mbps · <b>" + t.ping + "</b> ms";
     }
   }
+
+  $$("#sp-modes button").forEach((b) => b.addEventListener("click", () => {
+    cfg.continuous = b.dataset.cont === "1";
+    if (cfg.continuous && !cfg.probeSecs) cfg.probeSecs = 10;
+    renderSettings();
+    save(cfg.continuous ? "sürekli ölçüm açık · her " + cfg.probeSecs + " sn" : "canlı kullanım");
+    renderSpeed();
+  }));
+  $$("#probe-secs button").forEach((b) => b.addEventListener("click", () => {
+    cfg.probeSecs = Number(b.dataset.secs);
+    renderSettings();
+    save(cfg.probeSecs ? "ölçüm her " + cfg.probeSecs + " sn" : "ölçüm kapalı");
+  }));
 
   $("#sp-test").addEventListener("click", () => {
     DPI.speedTest();
@@ -454,6 +483,8 @@
     $("#domains-wrap").hidden = !!cfg.scopeAll;
     if (document.activeElement !== $("#domains")) $("#domains").value = (cfg.domains || []).join("\n");
 
+    $$("#probe-secs button").forEach((b) => b.setAttribute("aria-pressed", String(Number(b.dataset.secs) === Number(cfg.probeSecs ?? 10))));
+
     $("#prof-name").textContent = presetName();
     $("#prof-sum").textContent = summary();
   }
@@ -525,13 +556,28 @@
   function mockBridge() {
     let c = {
       preset: "turkey", dns: "yandex", tlsrec: true, split: true, splitAtSni: true, firstCut: 2, delayMs: 3,
-      httpTricks: true, scopeAll: true, logDns: false, port: 18881,
+      httpTricks: true, scopeAll: true, logDns: false, port: 18881, probeSecs: 10, continuous: false,
       domains: ["discord.com", "discord.gg", "discordapp.com", "discordapp.net", "discord.media", "discordcdn.com"],
     };
     const s = { running: false, starting: false, error: null, since: 0, port: -1, active: 0, total: 0, desynced: 0, up: 0, down: 0, dns: 0, dnsCached: 0 };
     const sp = { down: 0, up: 0, ping: 24, histDown: Array(40).fill(0), histUp: Array(40).fill(0) };
     const test = { phase: "idle", ping: -1, down: 0, up: 0, progress: 0, error: null, at: 0 };
     s.speed = sp; s.test = test;
+    const probe = { down: -1, up: -1, ping: -1, at: 0, busy: false, next: 10, interval: 10, bytes: 0 };
+    s.probe = probe;
+    setInterval(() => {
+      probe.interval = c.probeSecs ?? 10;
+      if (!probe.interval) { probe.next = -1; return; }
+      probe.next = Math.max(0, probe.next - 1);
+      if (probe.next === 0 && !probe.busy) {
+        probe.busy = true;
+        setTimeout(() => {
+          Object.assign(probe, { busy: false, down: 180e6 + Math.random() * 60e6, up: 14e6 + Math.random() * 6e6,
+            ping: 55 + ((Math.random() * 20) | 0), at: Date.now(), next: probe.interval });
+          probe.bytes += 3.6e6;
+        }, 2200);
+      }
+    }, 1000);
     setInterval(() => {
       const base = s.running ? 18e6 : 3e6;
       sp.down = Math.max(0, base * (0.4 + Math.random()));

@@ -57,6 +57,10 @@
             <span class="badge" id="sp-mode">CANLI</span>
             <div class="right"><button class="btn btn-ghost" type="button" id="sp-test">HIZ TESTİ ▶</button></div>
           </div>
+          <div class="seg sp-modes" id="sp-modes">
+            <button type="button" data-cont="0">CANLI KULLANIM</button>
+            <button type="button" data-cont="1"><span class="rec"></span>SÜREKLİ ÖLÇ</button>
+          </div>
           <div class="gauge-wrap">
             <svg class="gauge" id="gauge" viewBox="0 0 260 168" aria-hidden="true">
               <path class="g-track" id="g-track" />
@@ -67,7 +71,7 @@
             <div class="gauge-val">
               <span class="dot" id="g-val">0.0</span>
               <span class="g-unit">Mbps</span>
-              <span class="g-lbl" id="g-lbl">↓ İNDİRME · CANLI</span>
+              <span class="g-lbl" id="g-lbl">↓ CANLI</span>
             </div>
           </div>
           <div class="sp-row">
@@ -160,6 +164,19 @@
             <textarea class="field" id="domains" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="discord.com"></textarea>
             <p class="muted" style="font-size:.78rem;margin:.4rem 0 0">Satır başına bir alan adı. Alt alan adları da dahil.</p>
           </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>ÖLÇÜM</h2></div>
+          <p class="panel-desc">Widget'lar ve hız panelindeki <b>SÜREKLİ ÖLÇ</b> bu aralıkla küçük bir hız ölçümü yapar
+            (en fazla ~3.8 MB). Ekran kapalıyken ölçülmez; ana ekranda widget yoksa ve SÜREKLİ ÖLÇ kapalıysa da ölçülmez.</p>
+          <div class="seg" id="probe-secs">
+            <button type="button" data-secs="5">5 SN</button>
+            <button type="button" data-secs="10">10 SN</button>
+            <button type="button" data-secs="30">30 SN</button>
+            <button type="button" data-secs="0">KAPALI</button>
+          </div>
+          <p class="muted mono" style="font-size:.75rem;margin:.55rem 0 0" id="probe-used">bu oturumda ölçüme giden veri: 0 MB</p>
         </div>
 
         <div class="panel">

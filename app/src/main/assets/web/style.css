@@ -257,6 +257,9 @@ b { font-weight: 700; }
 .sp-last i.dn { color: var(--red); }
 .sp-last b { color: var(--text); font-weight: 400; }
 #sp-test:disabled { opacity: 0.55; }
+.sp-modes { margin: 0.2rem 0 0.4rem; }
+.sp-modes .rec { display: inline-block; width: 0.5em; height: 0.5em; margin-right: 0.45em; background: var(--text-3); vertical-align: 0.08em; }
+.sp-modes button[aria-pressed="true"] .rec { background: var(--red); animation: blink 1.2s steps(2) infinite; }
 
 /* --- terminal --------------------------------------------------------------- */
 

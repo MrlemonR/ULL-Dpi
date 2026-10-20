@@ -8,4 +8,6 @@
     <string name="w_up_desc">Canlı yükleme hızı ve başlat/durdur</string>
     <string name="w_dual_name">ULL-DPI · Hız</string>
     <string name="w_dual_desc">İndirme ve yükleme, düğmesiz</string>
+    <string name="w_meter_name">ULL-DPI · Metre</string>
+    <string name="w_meter_desc">İbreli hız göstergesi (Ookla tarzı)</string>
 </resources>

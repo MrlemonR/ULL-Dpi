@@ -28,20 +28,25 @@ açıp kapatabilirsin.
 
 ## Hız göstergesi ve widget'lar
 
-- **DURUM ekranı → // HIZ:** Speedtest by Ookla gibi ibreli gösterge. Telefonun o anki toplam indirme / yükleme hızı ve
-  ping (ms) canlı akar; altında son 40 saniyenin grafiği var. **HIZ TESTİ ▶** gerçek bir test yapar
-  (ping → indirme → yükleme, `speed.cloudflare.com`).
-- **Ana ekran widget'ları (2x2):** ana ekrana uzun bas → Widget'lar → ULL-DPI. Dört çeşit:
+- **DURUM ekranı → // HIZ:** Speedtest by Ookla gibi ibreli gösterge, iki modda:
+  - **CANLI KULLANIM:** telefonun o anki toplam indirme / yükleme hızı (bir şey indirmiyorsan 0'a yakın).
+  - **SÜREKLİ ÖLÇ:** her 5 / 10 / 30 saniyede küçük bir gerçek ölçüm (ping + indirme + yükleme). Telefon boştayken de
+    hattın hızını gösterir.
+  - **HIZ TESTİ ▶:** tam test (ping → indirme → yükleme, `speed.cloudflare.com`).
+- **Ana ekran widget'ları (2x2):** ana ekrana uzun bas → Widget'lar → ULL-DPI. Beş çeşit:
 
   | Widget | İçerik |
   | --- | --- |
   | ULL-DPI · Hız + düğme | ↓ indirme, ↑ yükleme, ping, BAŞLAT/DURDUR |
   | ULL-DPI · İndirme | büyük ↓ indirme, ping, BAŞLAT/DURDUR |
   | ULL-DPI · Yükleme | büyük ↑ yükleme, ping, BAŞLAT/DURDUR |
-  | ULL-DPI · Hız | ↓ ve ↑, düğmesiz (dokununca uygulama açılır) |
+  | ULL-DPI · Hız | ↓ ve ↑, düğmesiz |
+  | ULL-DPI · Metre | Ookla tarzı ibreli gösterge |
 
-  Widget'lar ULL-DPI açıkken saniyede bir yenilenir. Kapalıyken pil harcamamak için ölçüm yapılmaz, rakamlar `—` olur;
-  BAŞLAT'a basınca canlanır.
+  Widget'lar da SÜREKLİ ÖLÇ gibi ölçer (aralık: AYAR → ÖLÇÜM). Ölçüm yalnızca ULL-DPI açıkken ya da uygulama
+  ekrandayken, ekran açıkken yapılır.
+- **Veri kullanımı:** her ölçüm en fazla ~3.8 MB. 10 saniyede bir, ekran açık geçen her saat için en fazla ~1.3 GB eder;
+  mobil veride 30 SN ya da KAPALI seçmek isteyebilirsin. Harcanan miktar AYAR → ÖLÇÜM'de görünür.
 - Bildirimde de canlı hız görünür: `ULL::DPI aktif ↓ 12.4 ↑ 1.2 Mbps`.
 
 ## Nasıl çalışır

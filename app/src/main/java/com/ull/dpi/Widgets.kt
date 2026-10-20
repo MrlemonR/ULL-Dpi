@@ -6,28 +6,31 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.graphics.Color
 import android.net.VpnService
 import android.os.Build
-import android.text.SpannableString
-import android.text.Spanned
-import android.text.style.ForegroundColorSpan
+import android.os.Bundle
 import android.widget.RemoteViews
 
 /*
- * Ana ekran widget'ları (2x2). Dört çeşit:
+ * Ana ekran widget'ları (2x2). Beş çeşit:
  *
- *   FULL  ↓ indirme + ↑ yükleme + ping + başlat/durdur
- *   DOWN  büyük ↓ indirme + başlat/durdur
- *   UP    büyük ↑ yükleme + başlat/durdur
- *   DUAL  ↓ + ↑, düğmesiz (dokununca uygulama açılır)
+ *   FULL   ↓ indirme + ↑ yükleme + ping + başlat/durdur
+ *   DOWN   büyük ↓ indirme + başlat/durdur
+ *   UP     büyük ↑ yükleme + başlat/durdur
+ *   DUAL   ↓ + ↑, düğmesiz (dokununca uygulama açılır)
+ *   METER  Ookla tarzı ibreli gösterge, düğmesiz
  *
- * Widget'ın kendi zamanlayıcısı yok: VPN açıkken (ya da uygulama ekrandayken)
- * Ticker saniyede bir hepsini yeniliyor. VPN kapalıyken son durum kalıyor.
+ * Değerler Probe'dan geliyor (5-10 sn'de bir küçük ölçüm); telefon o an
+ * internet kullanmasa da hattın hızı görünüyor. İçerik bitmap olarak çiziliyor
+ * (bkz. WidgetArt), düğme gerçek bir TextView.
  */
 open class SpeedWidget(private val kind: Widgets.Kind) : AppWidgetProvider() {
     override fun onUpdate(ctx: Context, mgr: AppWidgetManager, ids: IntArray) {
-        mgr.updateAppWidget(ids, Widgets.build(ctx, kind))
+        ids.forEach { Widgets.update(ctx, mgr, kind, it) }
+    }
+
+    override fun onAppWidgetOptionsChanged(ctx: Context, mgr: AppWidgetManager, id: Int, opts: Bundle) {
+        Widgets.update(ctx, mgr, kind, id) // boyut değişti: yeniden çiz
     }
 }
 
@@ -35,46 +38,56 @@ class WidgetFull : SpeedWidget(Widgets.Kind.FULL)
 class WidgetDown : SpeedWidget(Widgets.Kind.DOWN)
 class WidgetUp : SpeedWidget(Widgets.Kind.UP)
 class WidgetDual : SpeedWidget(Widgets.Kind.DUAL)
+class WidgetMeter : SpeedWidget(Widgets.Kind.METER)
 
 object Widgets {
-    enum class Kind(val layout: Int, val provider: Class<*>, val button: Boolean) {
-        FULL(R.layout.widget_full, WidgetFull::class.java, true),
-        DOWN(R.layout.widget_down, WidgetDown::class.java, true),
-        UP(R.layout.widget_up, WidgetUp::class.java, true),
-        DUAL(R.layout.widget_dual, WidgetDual::class.java, false),
+    enum class Kind(val provider: Class<*>, val button: Boolean) {
+        FULL(WidgetFull::class.java, true),
+        DOWN(WidgetDown::class.java, true),
+        UP(WidgetUp::class.java, true),
+        DUAL(WidgetDual::class.java, false),
+        METER(WidgetMeter::class.java, false),
     }
 
-    private const val RED = 0xFFFF2A3D.toInt()
-    private const val GREY = 0xFF8C8C8C.toInt()
+    private const val PAD_DP = 14
+    private const val BTN_DP = 36 + 8
+
+    /** Ana ekranda en az bir ULL-DPI widget'ı var mı? */
+    fun any(ctx: Context): Boolean {
+        val mgr = AppWidgetManager.getInstance(ctx) ?: return false
+        return Kind.values().any { k ->
+            runCatching { mgr.getAppWidgetIds(ComponentName(ctx, k.provider)).isNotEmpty() }.getOrDefault(false)
+        }
+    }
 
     fun updateAll(ctx: Context) {
         val mgr = AppWidgetManager.getInstance(ctx) ?: return
         for (k in Kind.values()) {
-            val ids = runCatching { mgr.getAppWidgetIds(ComponentName(ctx, k.provider)) }.getOrNull()
-            if (ids == null || ids.isEmpty()) continue
-            runCatching { mgr.updateAppWidget(ids, build(ctx, k)) }
+            val ids = runCatching { mgr.getAppWidgetIds(ComponentName(ctx, k.provider)) }.getOrNull() ?: continue
+            ids.forEach { update(ctx, mgr, k, it) }
         }
     }
 
-    fun build(ctx: Context, k: Kind): RemoteViews {
-        val v = RemoteViews(ctx.packageName, k.layout)
+    fun update(ctx: Context, mgr: AppWidgetManager, k: Kind, id: Int) {
+        runCatching { mgr.updateAppWidget(id, build(ctx, mgr, k, id)) }
+    }
+
+    private fun build(ctx: Context, mgr: AppWidgetManager, k: Kind, id: Int): RemoteViews {
+        val v = RemoteViews(ctx.packageName, if (k.button) R.layout.widget_btn else R.layout.widget_img)
         val on = VpnState.running
         val wait = VpnState.starting
-        // Ölçüm sadece Ticker çalışırken taze; değilse çizgi göster.
-        val live = Ticker.active
 
-        val brand = SpannableString("ULL::DPI")
-        brand.setSpan(ForegroundColorSpan(RED), 3, 5, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-        v.setTextViewText(R.id.w_brand, brand)
-
-        v.setTextViewText(R.id.w_state, if (wait) "◌ BAĞLANIYOR" else if (on) "● AKTİF" else "○ KAPALI")
-        v.setTextColor(R.id.w_state, if (on) RED else GREY)
-
-        val down = if (live) Speed.fmt(Speed.down) else "—"
-        val up = if (live) Speed.fmt(Speed.up) else "—"
-        if (k != Kind.UP) v.setTextViewText(R.id.w_down, down)
-        if (k != Kind.DOWN) v.setTextViewText(R.id.w_up, up)
-        v.setTextViewText(R.id.w_ping, "PING " + (if (live && Speed.ping >= 0) "${Speed.ping}" else "—") + " ms")
+        // Widget'ın gerçek boyutu (dp). Dikey ekranda genişlik = min, yükseklik = max.
+        val opts = mgr.getAppWidgetOptions(id)
+        val wDp = opts.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH).takeIf { it > 0 } ?: 160
+        val hDp = opts.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT).takeIf { it > 0 } ?: 160
+        val imgWDp = wDp - 2 * PAD_DP
+        val imgHDp = hDp - 2 * PAD_DP - (if (k.button) BTN_DP else 0)
+        // Bitmap yoğunluğu: keskin ama widget IPC sınırını aşmayacak kadar.
+        val d = minOf(ctx.resources.displayMetrics.density, 2.5f)
+        val data = WidgetArt.Data(on, wait, Probe.down, Probe.up, Probe.ping)
+        val bmp = WidgetArt.draw(ctx, k, (imgWDp * d).toInt().coerceAtLeast(80), (imgHDp * d).toInt().coerceAtLeast(60), d, data)
+        v.setImageViewBitmap(R.id.w_img, bmp)
 
         val open = PendingIntent.getActivity(
             ctx, 10, Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
@@ -83,9 +96,9 @@ object Widgets {
         v.setOnClickPendingIntent(R.id.w_root, open)
 
         if (k.button) {
-            v.setTextViewText(R.id.w_btn, if (wait) "[ . . . ]" else if (on) "[ DURDUR ]" else "[ BAŞLAT ]")
-            v.setTextColor(R.id.w_btn, if (on) Color.WHITE else 0xFFF0F0F0.toInt())
-            v.setInt(R.id.w_btn, "setBackgroundResource", if (on) R.drawable.widget_btn_on else R.drawable.widget_btn_off)
+            v.setTextViewText(R.id.w_btn, if (wait) "· · ·" else if (on) "DURDUR" else "BAŞLAT")
+            v.setTextColor(R.id.w_btn, if (on) 0xFFFFFFFF.toInt() else 0xFF000000.toInt())
+            v.setInt(R.id.w_btn, "setBackgroundResource", if (on) R.drawable.widget_pill_stop else R.drawable.widget_pill_start)
             v.setOnClickPendingIntent(R.id.w_btn, toggle(ctx, on || wait))
         }
         return v
