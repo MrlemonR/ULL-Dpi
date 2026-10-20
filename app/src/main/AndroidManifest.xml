@@ -2,6 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Wi-Fi mi mobil veri mi? (Mobil veride ölçme ayarı) -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Widget/kutucuktan arka planda başlatılabilmesi için ön plan servisi -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />

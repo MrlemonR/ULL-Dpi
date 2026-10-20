@@ -139,9 +139,18 @@ object Ticker {
             }
             if (Probe.due(ctx)) Probe.runAsync { Widgets.updateAll(ctx) }
             listeners.forEach { it(n) }
-        } catch (_: Exception) {
-            // Zamanlayıcı bir hatada sessizce ölmesin.
+        } catch (e: Exception) {
+            // Zamanlayıcı bir hatada ölmesin; ama hata görünsün.
+            report(e)
         }
+    }
+
+    private val reported = HashSet<String>()
+
+    /** Aynı hatayı bir kez LOG'a yaz (her saniye tekrar etmesin). */
+    fun report(e: Exception) {
+        val key = e.javaClass.simpleName + ": " + e.message
+        if (synchronized(reported) { reported.add(key) }) com.ull.dpi.core.Logbook.add("ERR", "ölçüm: $key")
     }
 }
 
@@ -190,11 +199,17 @@ object Probe {
     }
 
     /** İnternet şu an mobil veriden mi? (Bu uygulama VPN dışında: gerçek ağı görür.) */
-    fun onMobile(ctx: Context): Boolean {
+    fun onMobile(ctx: Context): Boolean = try {
         val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
-        val caps = cm.getNetworkCapabilities(cm.activeNetwork ?: return false) ?: return false
-        return caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR) &&
+        val caps = cm.activeNetwork?.let { cm.getNetworkCapabilities(it) }
+        caps != null &&
+            caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR) &&
             !caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI)
+    } catch (e: Exception) {
+        // Ağ bilgisi okunamazsa ölçümü engelleme (önceden izin eksikti ve
+        // buradaki hata ölçümü tamamen durduruyordu).
+        Ticker.report(e)
+        false
     }
 
     /** Sonraki ölçüme kalan saniye (arayüzdeki geri sayım için). */
