@@ -50,6 +50,38 @@
           <div class="tile"><div class="l">TRAFİK</div><div class="v" id="st-traffic">0 B</div></div>
         </div>
 
+        <!-- Speedtest by Ookla gibi: ibre + ping / indirme / yükleme -->
+        <div class="panel speed">
+          <div class="panel-head">
+            <h2>HIZ</h2>
+            <span class="badge" id="sp-mode">CANLI</span>
+            <div class="right"><button class="btn btn-ghost" type="button" id="sp-test">HIZ TESTİ ▶</button></div>
+          </div>
+          <div class="gauge-wrap">
+            <svg class="gauge" id="gauge" viewBox="0 0 260 168" aria-hidden="true">
+              <path class="g-track" id="g-track" />
+              <path class="g-fill" id="g-fill" />
+              <g id="g-ticks"></g>
+              <line class="g-needle" id="g-needle" x1="130" y1="80" x2="130" y2="40" />
+            </svg>
+            <div class="gauge-val">
+              <span class="dot" id="g-val">0.0</span>
+              <span class="g-unit">Mbps</span>
+              <span class="g-lbl" id="g-lbl">↓ İNDİRME · CANLI</span>
+            </div>
+          </div>
+          <div class="sp-row">
+            <div class="sp-cell"><div class="l">PING <small>ms</small></div><div class="v dot" id="sp-ping">—</div></div>
+            <div class="sp-cell"><div class="l"><i class="dn">↓</i> İNDİRME <small>Mbps</small></div><div class="v dot" id="sp-down">0.0</div></div>
+            <div class="sp-cell"><div class="l"><i>↑</i> YÜKLEME <small>Mbps</small></div><div class="v dot" id="sp-up">0.0</div></div>
+          </div>
+          <svg class="spark" viewBox="0 0 400 44" preserveAspectRatio="none" aria-hidden="true">
+            <path class="sp-u" id="spark-u" />
+            <path class="sp-d" id="spark-d" />
+          </svg>
+          <div class="sp-last" id="sp-last">son 40 sn · <i class="dn">━</i> indirme · <i>━</i> yükleme</div>
+        </div>
+
         <div class="panel">
           <div class="panel-head">
             <h2>PROFİL</h2>

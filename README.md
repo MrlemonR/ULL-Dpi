@@ -26,6 +26,24 @@ terminal yazı tipi, arkada matrix yağmuru.
 Android 10 ve üstü önerilir. Bildirim panelindeki hızlı ayarlara **ULL-DPI** kutucuğunu ekleyip tek dokunuşla
 açıp kapatabilirsin.
 
+## Hız göstergesi ve widget'lar
+
+- **DURUM ekranı → // HIZ:** Speedtest by Ookla gibi ibreli gösterge. Telefonun o anki toplam indirme / yükleme hızı ve
+  ping (ms) canlı akar; altında son 40 saniyenin grafiği var. **HIZ TESTİ ▶** gerçek bir test yapar
+  (ping → indirme → yükleme, `speed.cloudflare.com`).
+- **Ana ekran widget'ları (2x2):** ana ekrana uzun bas → Widget'lar → ULL-DPI. Dört çeşit:
+
+  | Widget | İçerik |
+  | --- | --- |
+  | ULL-DPI · Hız + düğme | ↓ indirme, ↑ yükleme, ping, BAŞLAT/DURDUR |
+  | ULL-DPI · İndirme | büyük ↓ indirme, ping, BAŞLAT/DURDUR |
+  | ULL-DPI · Yükleme | büyük ↑ yükleme, ping, BAŞLAT/DURDUR |
+  | ULL-DPI · Hız | ↓ ve ↑, düğmesiz (dokununca uygulama açılır) |
+
+  Widget'lar ULL-DPI açıkken saniyede bir yenilenir. Kapalıyken pil harcamamak için ölçüm yapılmaz, rakamlar `—` olur;
+  BAŞLAT'a basınca canlanır.
+- Bildirimde de canlı hız görünür: `ULL::DPI aktif ↓ 12.4 ↑ 1.2 Mbps`.
+
 ## Nasıl çalışır
 
 ```

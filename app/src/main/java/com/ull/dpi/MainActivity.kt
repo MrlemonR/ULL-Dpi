@@ -104,8 +104,15 @@ class MainActivity : Activity() {
         }
     }
 
+    override fun onPause() {
+        Ticker.release("ui")
+        super.onPause()
+    }
+
     override fun onResume() {
         super.onResume()
+        // Ekran açıkken VPN kapalı olsa da canlı hız ölçülsün.
+        Ticker.acquire(this, "ui")
         // Hızlı ayar kutucuğundan "izin gerekiyor" diye açıldıysak başlat.
         if (intent?.getBooleanExtra(EXTRA_START, false) == true) {
             intent.removeExtra(EXTRA_START)
@@ -157,7 +164,29 @@ class MainActivity : Activity() {
             .put("dnsCached", Stats.dnsCached.get())
             .put("dnsFailed", Stats.dnsFailed.get())
             .put("proxyApi", Build.VERSION.SDK_INT >= 29)
+            .put("speed", speedJson())
+            .put("test", JSONObject()
+                .put("phase", SpeedTest.phase)
+                .put("ping", SpeedTest.ping)
+                .put("down", SpeedTest.down)
+                .put("up", SpeedTest.up)
+                .put("progress", SpeedTest.progress)
+                .put("error", SpeedTest.error ?: JSONObject.NULL)
+                .put("at", SpeedTest.finishedAt))
             .toString()
+
+        private fun speedJson(): JSONObject {
+            val (d, u) = Speed.history()
+            return JSONObject()
+                .put("down", Speed.down)
+                .put("up", Speed.up)
+                .put("ping", Speed.ping)
+                .put("histDown", JSONArray(d.map { it }))
+                .put("histUp", JSONArray(u.map { it }))
+        }
+
+        @JavascriptInterface
+        fun speedTest() = SpeedTest.start()
 
         @JavascriptInterface
         fun logs(since: Double): String {

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="w_full_name">ULL-DPI · Hız + düğme</string>
+    <string name="w_full_desc">İndirme, yükleme, ping ve başlat/durdur</string>
+    <string name="w_down_name">ULL-DPI · İndirme</string>
+    <string name="w_down_desc">Canlı indirme hızı ve başlat/durdur</string>
+    <string name="w_up_name">ULL-DPI · Yükleme</string>
+    <string name="w_up_desc">Canlı yükleme hızı ve başlat/durdur</string>
+    <string name="w_dual_name">ULL-DPI · Hız</string>
+    <string name="w_dual_desc">İndirme ve yükleme, düğmesiz</string>
+</resources>

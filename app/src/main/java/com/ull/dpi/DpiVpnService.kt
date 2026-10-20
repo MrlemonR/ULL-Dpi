@@ -13,8 +13,7 @@ import android.os.ParcelFileDescriptor
 import android.system.Os
 import android.system.OsConstants
 import android.system.StructPollfd
-import android.service.quicksettings.TileService
-import android.content.ComponentName
+import android.content.pm.ServiceInfo
 import com.ull.dpi.core.CachingResolver
 import com.ull.dpi.core.DnsTunnel
 import com.ull.dpi.core.LocalProxy
@@ -22,16 +21,6 @@ import com.ull.dpi.core.Logbook
 import com.ull.dpi.core.Stats
 import java.io.FileInputStream
 import java.io.FileOutputStream
-
-/** Arayüzün okuduğu durum. */
-object VpnState {
-    @Volatile var running = false
-    @Volatile var starting = false
-    @Volatile var error: String? = null
-    @Volatile var since = 0L
-    @Volatile var port = -1
-    @Volatile var summary = ""
-}
 
 /*
  * Root gerektirmeyen yerel "VPN". Gerçek bir VPN sunucusu YOK, trafik hiçbir
@@ -49,15 +38,23 @@ class DpiVpnService : VpnService() {
     private var worker: Thread? = null
     @Volatile private var logDns = false
 
+    private val ticker: (Int) -> Unit = { n -> if (n % 2 == 0 && VpnState.running) notifyRunning() }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Widget'tan / kutucuktan startForegroundService ile gelinebiliyor:
+        // 5 sn içinde ön plana geçmezsek sistem uygulamayı kapatıyor.
+        goForeground()
         when (intent?.action) {
             ACTION_STOP -> {
                 shutdown("durduruldu")
-                stopSelf()
+                stopAll()
                 return START_NOT_STICKY
             }
             ACTION_RELOAD -> {
-                if (!VpnState.running) return START_NOT_STICKY
+                if (!VpnState.running) {
+                    if (!VpnState.starting) stopAll()
+                    return START_NOT_STICKY
+                }
                 val cfg = Config.load(this)
                 proxy?.settings = cfg.proxySettings()
                 logDns = cfg.logDns
@@ -83,7 +80,7 @@ class DpiVpnService : VpnService() {
     private fun startVpn() {
         VpnState.starting = true
         VpnState.error = null
-        updateTile()
+        VpnState.changed(this)
         Thread({
             try {
                 val cfg = Config.load(this)
@@ -134,15 +131,17 @@ class DpiVpnService : VpnService() {
                 VpnState.since = System.currentTimeMillis()
                 VpnState.running = true
                 Logbook.add("SYS", "AKTİF ▸ ${VpnState.summary}")
+                Ticker.acquire(this, "vpn")
+                Ticker.listen(ticker)
                 notifyRunning()
             } catch (e: Exception) {
                 VpnState.error = e.message ?: e.javaClass.simpleName
                 Logbook.add("ERR", "başlatılamadı: ${VpnState.error}")
                 shutdown(null)
-                stopSelf()
+                stopAll()
             } finally {
                 VpnState.starting = false
-                updateTile()
+                VpnState.changed(this)
             }
         }, "vpn-start").start()
     }
@@ -157,15 +156,22 @@ class DpiVpnService : VpnService() {
         worker?.interrupt()
         dns = null; tun = null; proxy = null; worker = null
         VpnState.port = -1
+        Ticker.unlisten(ticker)
+        Ticker.release("vpn")
         if (wasRunning && reason != null) Logbook.add("SYS", reason)
-        getSystemService(NotificationManager::class.java)?.cancel(NOTIF_ID)
-        updateTile()
+        VpnState.changed(this)
+    }
+
+    private fun stopAll() {
+        if (Build.VERSION.SDK_INT >= 24) stopForeground(STOP_FOREGROUND_REMOVE)
+        else @Suppress("DEPRECATION") stopForeground(true)
+        stopSelf()
     }
 
     override fun onRevoke() {
         // Başka bir VPN açıldı ya da kullanıcı sistem ayarlarından kapattı.
         shutdown("VPN sistem tarafından kapatıldı")
-        stopSelf()
+        stopAll()
     }
 
     override fun onDestroy() {
@@ -178,35 +184,52 @@ class DpiVpnService : VpnService() {
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
 
-    private fun notifyRunning() {
-        val nm = getSystemService(NotificationManager::class.java) ?: return
-        if (Build.VERSION.SDK_INT >= 33 && !nm.areNotificationsEnabled()) return
+    private fun channel() {
         if (Build.VERSION.SDK_INT >= 26) {
-            nm.createNotificationChannel(
-                NotificationChannel(CHANNEL, "ULL-DPI durumu", NotificationManager.IMPORTANCE_LOW)
+            getSystemService(NotificationManager::class.java)?.createNotificationChannel(
+                NotificationChannel(CHANNEL, "ULL-DPI durumu", NotificationManager.IMPORTANCE_LOW).apply {
+                    setShowBadge(false)
+                }
             )
         }
+    }
+
+    private fun notification(): Notification {
+        channel()
         val stop = PendingIntent.getService(
             this, 1, Intent(this, DpiVpnService::class.java).setAction(ACTION_STOP),
             PendingIntent.FLAG_IMMUTABLE,
         )
         @Suppress("DEPRECATION")
-        val builder = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, CHANNEL) else Notification.Builder(this)
-        val n = builder
-            .setSmallIcon(R.drawable.ic_stat)
-            .setContentTitle("ULL::DPI aktif")
-            .setContentText(VpnState.summary)
+        val b = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, CHANNEL) else Notification.Builder(this)
+        b.setSmallIcon(R.drawable.ic_stat)
             .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setShowWhen(false)
             .setContentIntent(openAppIntent())
-            .addAction(Notification.Action.Builder(null, "DURDUR", stop).build())
-            .build()
-        nm.notify(NOTIF_ID, n)
+        if (VpnState.running) {
+            b.setContentTitle("ULL::DPI aktif  ↓ ${Speed.fmt(Speed.down)}  ↑ ${Speed.fmt(Speed.up)} Mbps")
+                .setContentText(VpnState.summary + (if (Speed.ping >= 0) " · ${Speed.ping} ms" else ""))
+                .addAction(Notification.Action.Builder(null, "DURDUR", stop).build())
+        } else {
+            b.setContentTitle("ULL::DPI").setContentText("bağlanıyor…")
+        }
+        return b.build()
     }
 
-    private fun updateTile() {
-        if (Build.VERSION.SDK_INT >= 24) {
-            runCatching { TileService.requestListeningState(this, ComponentName(this, DpiTileService::class.java)) }
+    private fun goForeground() {
+        val n = notification()
+        if (Build.VERSION.SDK_INT >= 34) {
+            startForeground(NOTIF_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        } else {
+            startForeground(NOTIF_ID, n)
         }
+    }
+
+    /** Bildirimdeki canlı hız; Ticker iki saniyede bir çağırıyor. */
+    private fun notifyRunning() {
+        val nm = getSystemService(NotificationManager::class.java) ?: return
+        runCatching { nm.notify(NOTIF_ID, notification()) }
     }
 
     companion object {
@@ -218,8 +241,12 @@ class DpiVpnService : VpnService() {
         private const val CHANNEL = "status"
         private const val NOTIF_ID = 7
 
+        fun intent(ctx: Context, action: String): Intent =
+            Intent(ctx, DpiVpnService::class.java).setAction(action)
+
         fun send(ctx: Context, action: String) {
-            ctx.startService(Intent(ctx, DpiVpnService::class.java).setAction(action))
+            val i = intent(ctx, action)
+            if (Build.VERSION.SDK_INT >= 26) ctx.startForegroundService(i) else ctx.startService(i)
         }
     }
 }

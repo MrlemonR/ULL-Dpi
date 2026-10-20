@@ -13,6 +13,9 @@
 @font-face { font-family: "JetBrains Mono"; font-weight: 700; font-display: swap; src: url(fonts/jbm-latin-ext-700.woff2) format("woff2");
   unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1E00-1E9F, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
 
+/* Nokta vuruşlu rakamlar (Nothing havası) */
+@font-face { font-family: "Doto"; font-weight: 800; font-display: swap; src: url(fonts/doto-800.woff2) format("woff2"); }
+
 :root {
   color-scheme: dark;
 
@@ -214,6 +217,46 @@ b { font-weight: 700; }
 .prof .name { font: 700 0.95rem/1.2 var(--mono); letter-spacing: 0.08em; }
 .prof .name::before { content: "◆ "; color: var(--red); font-size: 0.7em; vertical-align: 0.12em; }
 .prof .sum { font: 0.78rem/1.4 var(--mono); color: var(--text-3); margin-top: 0.25rem; word-break: break-word; }
+
+/* --- hız (Ookla tarzı) --------------------------------------------------------- */
+
+.dot { font-family: "Doto", var(--mono); font-weight: 800; letter-spacing: 0.02em; }
+.speed .panel-head .badge { margin-left: 0.2rem; }
+.speed .badge.live::before { content: "● "; color: var(--red); animation: blink 1.4s steps(2) infinite; }
+
+.gauge-wrap { position: relative; margin: 0.2rem auto 0; max-width: 21rem; }
+.gauge { display: block; width: 100%; height: auto; overflow: visible; }
+.g-track { fill: none; stroke: var(--line-strong); stroke-width: 12; }
+.g-fill { fill: none; stroke: var(--red); stroke-width: 12; filter: drop-shadow(0 0 6px var(--red-line)); }
+.g-tick { stroke: var(--text-3); stroke-width: 2; }
+.g-tick.on { stroke: var(--text); }
+.g-num { font: 9px var(--mono); fill: var(--text-3); text-anchor: middle; dominant-baseline: middle; }
+.g-num.on { fill: var(--text); }
+.g-needle { stroke: var(--text); stroke-width: 3; }
+.speed.is-up .g-fill { stroke: var(--text); filter: drop-shadow(0 0 6px rgba(255,255,255,.35)); }
+
+.gauge-val { position: absolute; left: 0; right: 0; top: 55%; display: flex; flex-direction: column; align-items: center; pointer-events: none; }
+.gauge-val .dot { font-size: 2.6rem; line-height: 1; color: var(--text); text-shadow: 0 0 18px rgba(255, 255, 255, 0.18); }
+.g-unit { font: 0.7rem/1.2 var(--mono); color: var(--text-3); letter-spacing: 0.1em; }
+.g-lbl { margin-top: 0.15rem; font: 0.68rem/1.2 var(--mono); color: var(--text-2); letter-spacing: 0.1em; }
+
+.sp-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; margin-top: 0.9rem; background: var(--line); border: 1px solid var(--line); }
+.sp-cell { background: var(--panel-solid); padding: 0.6rem 0.6rem 0.65rem; min-width: 0; }
+.sp-cell .l { font: 0.62rem/1.2 var(--mono); letter-spacing: 0.08em; color: var(--text-3); white-space: nowrap; }
+.sp-cell .l small { font-size: 0.9em; opacity: 0.8; }
+.sp-cell .l i { font-style: normal; color: var(--text); }
+.sp-cell .l i.dn { color: var(--red); }
+.sp-cell .v { margin-top: 0.35rem; font-size: 1.55rem; line-height: 1; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.spark { display: block; width: 100%; height: 2.6rem; margin-top: 0.7rem; border-bottom: 1px solid var(--line); }
+.spark path { fill: none; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.spark .sp-d { stroke: var(--red); }
+.spark .sp-u { stroke: var(--text-3); }
+.sp-last { margin-top: 0.4rem; font: 0.7rem/1.4 var(--mono); color: var(--text-3); }
+.sp-last i { font-style: normal; color: var(--text-3); }
+.sp-last i.dn { color: var(--red); }
+.sp-last b { color: var(--text); font-weight: 400; }
+#sp-test:disabled { opacity: 0.55; }
 
 /* --- terminal --------------------------------------------------------------- */
 

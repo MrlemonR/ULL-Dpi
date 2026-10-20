@@ -11,21 +11,37 @@ import android.service.quicksettings.TileService
 /** Bildirim panelindeki hızlı ayar kutucuğu: tek dokunuşla aç/kapa. */
 class DpiTileService : TileService() {
 
-    override fun onStartListening() = refresh()
+    // Panel açıkken servis durumu değişirse kutucuk hemen güncellensin.
+    private val onChange: () -> Unit = { refresh() }
+
+    override fun onStartListening() {
+        VpnState.listen(onChange)
+        refresh()
+    }
+
+    override fun onStopListening() = VpnState.unlisten(onChange)
 
     override fun onClick() {
         if (VpnState.running || VpnState.starting) {
-            DpiVpnService.send(this, DpiVpnService.ACTION_STOP)
+            send(DpiVpnService.ACTION_STOP)
+            // Servis birazdan durumu bildirecek; o ana kadar kapalı göster.
+            refresh(forceOn = false)
         } else if (VpnService.prepare(this) != null) {
             openApp() // VPN izni henüz verilmemiş: uygulamada sor
+        } else if (send(DpiVpnService.ACTION_START)) {
+            refresh(forceOn = true)
         } else {
-            try {
-                DpiVpnService.send(this, DpiVpnService.ACTION_START)
-            } catch (_: IllegalStateException) {
-                openApp() // arka plandan servis başlatılamadı
-            }
+            openApp() // arka plandan servis başlatılamadı
         }
-        refresh()
+    }
+
+    private fun send(action: String): Boolean = try {
+        DpiVpnService.send(this, action)
+        true
+    } catch (_: IllegalStateException) {
+        false
+    } catch (_: SecurityException) {
+        false
     }
 
     @SuppressLint("StartActivityAndCollapseDeprecated")
@@ -41,13 +57,15 @@ class DpiTileService : TileService() {
         }
     }
 
-    private fun refresh() {
+    /** Açıkken STATE_ACTIVE (beyaz/parlak), kapalıyken STATE_INACTIVE. */
+    private fun refresh(forceOn: Boolean? = null) {
         val t = qsTile ?: return
-        t.state = if (VpnState.running) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
+        val on = forceOn ?: (VpnState.running || VpnState.starting)
+        t.state = if (on) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
         t.label = "ULL-DPI"
         if (Build.VERSION.SDK_INT >= 29) t.subtitle = when {
-            VpnState.starting -> "bağlanıyor"
-            VpnState.running -> "aktif"
+            forceOn == true || VpnState.starting -> "bağlanıyor"
+            on -> "aktif"
             else -> "kapalı"
         }
         t.updateTile()

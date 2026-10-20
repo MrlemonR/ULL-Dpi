@@ -158,6 +158,7 @@
   function poll() {
     try { state = JSON.parse(DPI.status()); } catch (e) { /* köprü meşgul */ }
     render();
+    renderSpeed();
     pullLogs();
   }
 
@@ -207,6 +208,139 @@
     while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
     return (i ? n.toFixed(n < 10 ? 1 : 0) : n) + " " + u[i];
   }
+
+  // --- hız (Ookla tarzı ibre) ----------------------------------------------------
+
+  const G = { cx: 130, cy: 112, r: 94, a0: 150, sweep: 240 };
+  const SCALE_S = [0, 1, 5, 10, 20, 30, 50, 75, 100];
+  const SCALE_L = [0, 5, 10, 50, 100, 250, 500, 750, 1000];
+  let scale = SCALE_S;
+  let gTarget = 0, gShown = 0, gLabel = "";
+  const svgNS = "http://www.w3.org/2000/svg";
+
+  const mbps = (bits) => (bits || 0) / 1e6;
+  const fmtM = (bits) => { const m = mbps(bits); return m < 10 ? m.toFixed(1) : m.toFixed(0); };
+  const pt = (a, r) => [G.cx + r * Math.cos(a * Math.PI / 180), G.cy + r * Math.sin(a * Math.PI / 180)];
+  function arc(a1, a2, r) {
+    const [x1, y1] = pt(a1, r), [x2, y2] = pt(a2, r);
+    return `M${x1.toFixed(1)} ${y1.toFixed(1)} A${r} ${r} 0 ${a2 - a1 > 180 ? 1 : 0} 1 ${x2.toFixed(1)} ${y2.toFixed(1)}`;
+  }
+  // Ookla gibi doğrusal olmayan ölçek: her aralık eşit açı.
+  function angleOf(m) {
+    const n = scale.length - 1;
+    if (m >= scale[n]) return G.a0 + G.sweep;
+    let i = 0;
+    while (i < n - 1 && m >= scale[i + 1]) i++;
+    const f = Math.max(0, (m - scale[i]) / (scale[i + 1] - scale[i]));
+    return G.a0 + G.sweep * ((i + f) / n);
+  }
+
+  function drawTicks() {
+    const g = $("#g-ticks");
+    g.textContent = "";
+    scale.forEach((v, i) => {
+      const a = G.a0 + G.sweep * (i / (scale.length - 1));
+      const [x1, y1] = pt(a, G.r - 9), [x2, y2] = pt(a, G.r - 15);
+      const l = document.createElementNS(svgNS, "line");
+      l.setAttribute("class", "g-tick");
+      l.setAttribute("x1", x1); l.setAttribute("y1", y1); l.setAttribute("x2", x2); l.setAttribute("y2", y2);
+      l.dataset.v = v;
+      const [tx, ty] = pt(a, G.r - 26);
+      const t = document.createElementNS(svgNS, "text");
+      t.setAttribute("class", "g-num");
+      t.setAttribute("x", tx); t.setAttribute("y", ty);
+      t.textContent = v;
+      t.dataset.v = v;
+      g.append(l, t);
+    });
+  }
+  $("#g-track").setAttribute("d", arc(G.a0, G.a0 + G.sweep, G.r));
+  drawTicks();
+
+  function gaugeFrame() {
+    gShown += (gTarget - gShown) * 0.14;
+    if (Math.abs(gTarget - gShown) < 0.005) gShown = gTarget;
+    const a = angleOf(gShown);
+    $("#g-fill").setAttribute("d", a > G.a0 + 0.5 ? arc(G.a0, a, G.r) : "");
+    // İbre merkezden değil halkanın içinden başlıyor: ortadaki rakamı kapatmasın.
+    const [sx, sy] = pt(a, 48), [nx, ny] = pt(a, G.r - 18);
+    const n = $("#g-needle");
+    n.setAttribute("x1", sx.toFixed(1)); n.setAttribute("y1", sy.toFixed(1));
+    n.setAttribute("x2", nx.toFixed(1)); n.setAttribute("y2", ny.toFixed(1));
+    $("#g-val").textContent = gShown < 10 ? gShown.toFixed(1) : gShown.toFixed(0);
+    $$("#g-ticks [data-v]").forEach((el) => el.classList.toggle("on", Number(el.dataset.v) <= gShown + 1e-9));
+    requestAnimationFrame(gaugeFrame);
+  }
+  requestAnimationFrame(gaugeFrame);
+
+  function setGauge(bits, label, up) {
+    gTarget = mbps(bits);
+    const want = gTarget > 100 ? SCALE_L : (gTarget < 70 ? SCALE_S : scale);
+    if (want !== scale) { scale = want; drawTicks(); }
+    $("#g-lbl").textContent = label;
+    $(".speed").classList.toggle("is-up", !!up);
+  }
+
+  function spark(hd, hu) {
+    if (!hd || !hd.length) return;
+    const max = Math.max(1e5, ...hd, ...hu);
+    const path = (arr) => arr.map((v, i) =>
+      (i ? "L" : "M") + (i * 400 / (arr.length - 1)).toFixed(1) + " " + (42 - (v / max) * 38).toFixed(1)).join(" ");
+    $("#spark-d").setAttribute("d", path(hd));
+    $("#spark-u").setAttribute("d", path(hu));
+  }
+
+  const PHASE = { ping: "PING", down: "İNDİRME", up: "YÜKLEME" };
+  function renderSpeed() {
+    const sp = state.speed || {};
+    const t = state.test || { phase: "idle" };
+    const testing = t.phase in PHASE;
+    const recent = t.phase === "done" && Date.now() - t.at < 60000;
+    const badge = $("#sp-mode");
+    const btn = $("#sp-test");
+    let ping = sp.ping, down = sp.down, up = sp.up;
+
+    if (testing) {
+      if (t.phase === "ping") setGauge(0, "PING ÖLÇÜLÜYOR…", false);
+      else if (t.phase === "down") setGauge(t.down, "↓ İNDİRME · TEST", false);
+      else setGauge(t.up, "↑ YÜKLEME · TEST", true);
+      badge.className = "badge red";
+      badge.textContent = "TEST · " + PHASE[t.phase] + " %" + Math.round((t.progress || 0) * 100);
+      ping = t.ping; down = t.phase === "ping" ? null : t.down; up = t.phase === "up" ? t.up : null;
+      btn.disabled = true;
+      btn.textContent = "TEST…";
+    } else {
+      setGauge(sp.down, "↓ İNDİRME · CANLI", false);
+      btn.disabled = false;
+      btn.textContent = t.phase === "done" || t.phase === "error" ? "TEKRAR ▶" : "HIZ TESTİ ▶";
+      if (recent) {
+        badge.className = "badge solid";
+        badge.textContent = "SON TEST";
+        ping = t.ping; down = t.down; up = t.up;
+      } else {
+        badge.className = "badge live";
+        badge.textContent = "CANLI";
+      }
+    }
+    $("#sp-ping").textContent = ping >= 0 ? String(ping) : "—";
+    $("#sp-down").textContent = down == null ? "—" : fmtM(down);
+    $("#sp-up").textContent = up == null ? "—" : fmtM(up);
+    spark(sp.histDown, sp.histUp);
+
+    const last = $("#sp-last");
+    if (t.phase === "error") last.textContent = "> test başarısız: " + (t.error || "bilinmiyor");
+    else if (t.phase === "done") {
+      const hm = new Date(t.at).toTimeString().slice(0, 5);
+      last.innerHTML = "son test <b>" + hm + "</b> · ↓ <b>" + fmtM(t.down) + "</b> ↑ <b>" + fmtM(t.up) +
+        "</b> Mbps · <b>" + t.ping + "</b> ms";
+    }
+  }
+
+  $("#sp-test").addEventListener("click", () => {
+    DPI.speedTest();
+    toast("hız testi başladı · speed.cloudflare.com");
+    setTimeout(poll, 150);
+  });
 
   // --- log ----------------------------------------------------------------------
 
@@ -395,6 +529,17 @@
       domains: ["discord.com", "discord.gg", "discordapp.com", "discordapp.net", "discord.media", "discordcdn.com"],
     };
     const s = { running: false, starting: false, error: null, since: 0, port: -1, active: 0, total: 0, desynced: 0, up: 0, down: 0, dns: 0, dnsCached: 0 };
+    const sp = { down: 0, up: 0, ping: 24, histDown: Array(40).fill(0), histUp: Array(40).fill(0) };
+    const test = { phase: "idle", ping: -1, down: 0, up: 0, progress: 0, error: null, at: 0 };
+    s.speed = sp; s.test = test;
+    setInterval(() => {
+      const base = s.running ? 18e6 : 3e6;
+      sp.down = Math.max(0, base * (0.4 + Math.random()));
+      sp.up = Math.max(0, base * 0.12 * (0.3 + Math.random()));
+      sp.ping = 18 + ((Math.random() * 14) | 0);
+      sp.histDown.push(sp.down); sp.histDown.shift();
+      sp.histUp.push(sp.up); sp.histUp.shift();
+    }, 1000);
     const logs = [];
     let id = 0;
     const log = (tag, msg) => logs.push({ id: ++id, t: new Date().toTimeString().slice(0, 8), tag, msg });
@@ -425,6 +570,17 @@
       status: () => JSON.stringify(s),
       logs: (since) => JSON.stringify(logs.filter((l) => l.id > since)),
       clearLogs: () => { logs.length = 0; },
+      speedTest() {
+        Object.assign(test, { phase: "ping", ping: -1, down: 0, up: 0, progress: 0 });
+        const t0 = Date.now();
+        const iv = setInterval(() => {
+          const e = (Date.now() - t0) / 1000;
+          if (e < 1.5) { test.phase = "ping"; test.progress = e / 1.5; test.ping = 17; }
+          else if (e < 9.5) { test.phase = "down"; test.progress = (e - 1.5) / 8; test.down = 86e6 * (1 - Math.exp(-(e - 1.5))) * (0.95 + Math.random() * 0.1); }
+          else if (e < 16.5) { test.phase = "up"; test.progress = (e - 9.5) / 7; test.up = 21e6 * (1 - Math.exp(-(e - 9.5))) * (0.95 + Math.random() * 0.1); }
+          else { test.phase = "done"; test.at = Date.now(); clearInterval(iv); }
+        }, 200);
+      },
     };
   }
 
@@ -435,5 +591,6 @@
   applyLook();
   poll();
   setInterval(poll, 1000);
+  setInterval(() => { if (state.test && state.test.phase in PHASE) poll(); }, 250);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) poll(); });
 })();

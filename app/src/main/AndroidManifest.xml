@@ -3,6 +3,9 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Widget/kutucuktan arka planda başlatılabilmesi için ön plan servisi -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
     <application
         android:allowBackup="false"
@@ -27,10 +30,14 @@
         <service
             android:name=".DpiVpnService"
             android:exported="false"
+            android:foregroundServiceType="specialUse"
             android:permission="android.permission.BIND_VPN_SERVICE">
             <intent-filter>
                 <action android:name="android.net.VpnService" />
             </intent-filter>
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Yerel DPI atlatma VPN'i: DNS tüneli ve 127.0.0.1 proxy" />
         </service>
 
         <service
@@ -43,5 +50,53 @@
                 <action android:name="android.service.quicksettings.action.QS_TILE" />
             </intent-filter>
         </service>
+
+        <receiver
+            android:name=".WidgetFull"
+            android:exported="false"
+            android:label="@string/w_full_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_full" />
+        </receiver>
+
+        <receiver
+            android:name=".WidgetDown"
+            android:exported="false"
+            android:label="@string/w_down_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_down" />
+        </receiver>
+
+        <receiver
+            android:name=".WidgetUp"
+            android:exported="false"
+            android:label="@string/w_up_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_up" />
+        </receiver>
+
+        <receiver
+            android:name=".WidgetDual"
+            android:exported="false"
+            android:label="@string/w_dual_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_dual" />
+        </receiver>
     </application>
 </manifest>
